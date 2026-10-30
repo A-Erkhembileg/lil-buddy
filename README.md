@@ -89,6 +89,9 @@ Detection reads window geometry and process identifiers, without screenshots,
 window titles, Accessibility access, or Screen Recording requests. The operating
 system can still place secure/exclusive fullscreen surfaces above the pet.
 
+**Known macOS issue:** petting the animal may switch desktops when another app
+uses a fullscreen Space. This remains unresolved in the current preview.
+
 ## Run from source
 
 Requires Python 3.10+, Git, and a graphical macOS or Windows desktop.
