@@ -12,16 +12,26 @@ PyQt6 and are distributed under GPL version 3; see [Licensing](#licensing).
 
 ## Download and install
 
-Get the latest build from [GitHub Releases](https://github.com/A-Erkhembileg/lil-buddy/releases/latest).
-Release downloads are public and do not require a GitHub account or Python.
-Each release also provides a source ZIP matching that version.
+**[Download for Windows (64-bit)](https://github.com/A-Erkhembileg/lil-buddy/releases/latest/download/Lil-Buddy-Windows-amd64.zip)**
+· **[Download for Mac (Apple silicon)](https://github.com/A-Erkhembileg/lil-buddy/releases/latest/download/Lil-Buddy-macOS-arm64.dmg)**
+· **[Download for Mac (Intel)](https://github.com/A-Erkhembileg/lil-buddy/releases/latest/download/Lil-Buddy-macOS-x86_64.dmg)**
+
+Downloads are public and do not require a GitHub account or Python. Find all
+packages and the source ZIP at [GitHub Releases](https://github.com/A-Erkhembileg/lil-buddy/releases/latest).
+
+**Cloning, `git pull`, and Code → Download ZIP download the Python source.**
+They do not include a Windows executable. To run the app without Python, use
+the Windows download above.
 
 - **macOS:** download the DMG for your Mac's processor, open it, and drag
   **Lil Buddy.app** to Applications. Open the app and use the menu-bar face for
   settings and quit. An `arm64` build is for Apple silicon; an `x86_64` build is
   for Intel.
-- **Windows:** download the Windows ZIP, extract it, and open **Lil Buddy.exe**.
-  Use its system-tray icon for settings and quit.
+- **Windows:** download **Lil-Buddy-Windows-amd64.zip**, right-click it and choose
+  **Extract All**, then open **Lil Buddy.exe** in the extracted folder. The
+  executable's name contains a space; Windows may display it as **Lil Buddy**
+  when filename extensions are hidden. Use its system-tray icon for settings
+  and quit.
 
 These are unsigned preview builds: the Mac bundle is ad-hoc signed, without
 Apple notarization, and the Windows executable has no publisher certificate.
@@ -198,6 +208,8 @@ settings are excluded from Git. They are not needed in a source download.
 
 To update a clone, run `git pull` from the project folder, then reinstall the
 requirements if they changed. Quit and reopen the pet to load updated code.
+To update a packaged app, quit it and download the latest package from Releases;
+`git pull` does not update a previously downloaded executable.
 
 ## Licensing
 
