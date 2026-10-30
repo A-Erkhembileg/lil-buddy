@@ -5,7 +5,7 @@ import unittest
 import zipfile
 import json
 
-from tools.build_app import render_spec, write_windows_zip, prepare_distribution_notices, ROOT
+from tools.build_app import render_spec, write_windows_zip, prepare_distribution_notices, APP_VERSION, ROOT
 
 
 class BuildConfigurationTests(unittest.TestCase):
@@ -62,7 +62,7 @@ class BuildConfigurationTests(unittest.TestCase):
                 self.assertEqual(source.read("desktop_cat.py"), (ROOT / "desktop_cat.py").read_bytes())
                 self.assertIn("tools/build_app.py", source.namelist())
                 self.assertFalse(any(".venv" in name or name.startswith("build/") for name in source.namelist()))
-            self.assertEqual(json.loads((notices / "build-info.json").read_text())["version"], "1.0.0")
+            self.assertEqual(json.loads((notices / "build-info.json").read_text())["version"], APP_VERSION)
             executable = folder / "Lil Buddy.exe"
             executable.write_bytes(b"test executable")
             output = folder / "bundle.zip"

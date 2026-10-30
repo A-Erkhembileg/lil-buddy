@@ -145,9 +145,10 @@ class FullScreenDetector:
     True/False are geometry observations; None means unavailable/transient.
     Secure/exclusive presentation can prevent an ordinary pet overlay appearing.
     """
-    def __init__(self) -> None:
+    def __init__(self, window: QWidget | None = None) -> None:
         self.error: str | None = None
         self._pid = os.getpid()
+        self._window = window
         self._probe = None
         try:
             if sys.platform == "darwin":
@@ -282,17 +283,12 @@ class FullScreenDetector:
         self._dwmapi.DwmGetWindowAttribute.argtypes = [
             wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
         self._dwmapi.DwmGetWindowAttribute.restype = ctypes.c_long
-        self._monitor_callback_type = ctypes.WINFUNCTYPE(
-            wintypes.BOOL, wintypes.HANDLE, wintypes.HDC,
-            ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
-        self._user32.EnumDisplayMonitors.argtypes = [
-            wintypes.HDC, ctypes.POINTER(wintypes.RECT), self._monitor_callback_type, wintypes.LPARAM]
-        self._user32.EnumDisplayMonitors.restype = wintypes.BOOL
+        self._user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+        self._user32.MonitorFromWindow.restype = wintypes.HANDLE
 
         class MonitorInfo(ctypes.Structure):
             _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
-                        ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD),
-                        ("szDevice", wintypes.WCHAR * 32)]
+                        ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
 
         self._MonitorInfo = MonitorInfo
         self._user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MonitorInfo)]
@@ -302,26 +298,25 @@ class FullScreenDetector:
             self._set_dpi_context.argtypes = [ctypes.c_void_p]
             self._set_dpi_context.restype = ctypes.c_void_p
 
-    def _windows_monitor(self, screen):
-        requested_name = screen.name().casefold()
-        found = []
-
-        @self._monitor_callback_type
-        def callback(handle, _dc, _rect, _data):
-            info = self._MonitorInfo()
-            info.cbSize = ctypes.sizeof(info)
-            if self._user32.GetMonitorInfoW(handle, ctypes.byref(info)):
-                if info.szDevice.casefold() == requested_name:
-                    rectangle = info.rcMonitor
-                    found.append((rectangle.left, rectangle.top,
-                                  rectangle.right - rectangle.left, rectangle.bottom - rectangle.top))
-            return True
-
-        if not self._user32.EnumDisplayMonitors(None, None, callback, 0):
-            raise ctypes.WinError(ctypes.get_last_error())
-        if not found:
-            raise RuntimeError("The pet's display could not be matched to a Windows monitor.")
-        return found[0]
+    def _windows_monitor(self):
+        # Qt screen names can be friendly hardware names rather than the GDI
+        # device names returned by Windows. Resolve the actual pet window's
+        # monitor instead, keeping all measurements in native pixels.
+        if self._window is None:
+            raise RuntimeError("Fullscreen detection needs the pet's native window.")
+        hwnd = int(self._window.winId())
+        if not hwnd:
+            raise RuntimeError("The pet's native window is unavailable.")
+        monitor = self._user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST.
+        if not monitor:
+            raise RuntimeError("The pet's Windows monitor is unavailable.")
+        info = self._MonitorInfo()
+        info.cbSize = ctypes.sizeof(info)
+        if not self._user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            raise RuntimeError("The pet's Windows monitor geometry is unavailable.")
+        rectangle = info.rcMonitor
+        return (rectangle.left, rectangle.top,
+                rectangle.right - rectangle.left, rectangle.bottom - rectangle.top)
 
     def _windows_client(self, hwnd):
         rectangle, origin = self._wt.RECT(), self._wt.POINT(0, 0)
@@ -358,7 +353,7 @@ class FullScreenDetector:
         if self._set_dpi_context is not None:
             previous_dpi = self._set_dpi_context(ctypes.c_void_p(-4))  # Per-monitor V2.
         try:
-            display = self._windows_monitor(screen)
+            display = self._windows_monitor()
             client = self._windows_client(hwnd)
             if client is None:
                 return None
@@ -1652,7 +1647,7 @@ class DesktopCat(QWidget):
         self.timer.timeout.connect(self._tick)
         self._update_animation_timer()
         # Keep detection independent: the animation timer stops entirely when tucked away.
-        self.fullscreen_detector = FullScreenDetector()
+        self.fullscreen_detector = FullScreenDetector(self)
         self.fullscreen_timer = QTimer(self)
         self.fullscreen_timer.setInterval(250)
         self.fullscreen_timer.timeout.connect(self._poll_fullscreen)

@@ -98,6 +98,9 @@ stay available throughout.
 Detection reads window geometry and process identifiers, without screenshots,
 window titles, Accessibility access, or Screen Recording requests. The operating
 system can still place secure/exclusive fullscreen surfaces above the pet.
+On Windows, the pet's native window identifies its monitor independently of
+friendly display names; geometry comparisons use native pixels for mixed-scale
+displays. Version 1.0.1 fixes corner mode failing to start on these monitors.
 
 **Known macOS issue:** petting the animal may switch desktops when another app
 uses a fullscreen Space. This remains unresolved in the current preview.
@@ -181,7 +184,8 @@ Releases include DMGs, application ZIPs, the matching source ZIP, and
 Unit checks cover physics, animations, animals, palettes, preferences, sizes,
 controls, habits, and fullscreen transitions. The packaged smoke test checks real
 startup, all animals and sizes, speech, pause/hide, and latch/release in temporary
-settings. A Windows runner verifies the executable builds and starts; manual
+settings. The Windows runner also checks fullscreen and ordinary window geometry
+against real Win32 windows, then verifies the executable builds and starts. Manual
 checks of exclusive games and different display layouts remain useful on actual
 user machines.
 

@@ -69,6 +69,11 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           LIL_BUDDY_SETTINGS_DIR: ${{ runner.temp }}/lil-buddy-tests
+      - name: Check native Windows fullscreen detection
+        if: runner.os == 'Windows'
+        run: python tools/check_windows_fullscreen.py
+        env:
+          QT_QPA_PLATFORM: windows
       - name: Build macOS application and installer
         if: runner.os == 'macOS'
         run: python tools/build_app.py --dmg
@@ -209,6 +214,8 @@ jobs:
           Download the DMG for your Mac: arm64 for Apple Silicon, x86_64 for Intel. On Windows, extract the Windows ZIP and run Lil Buddy.exe. Python is not required for these downloads.
 
           Left-click to pet, drag to pick up, and right-click for animals, colors, sizes, and controls. Crow can take flight. Use the menu-bar/system-tray icon to pause, show, hide, or quit.
+
+          Windows fullscreen detection now uses the pet's native monitor handle. This fixes corner mode failing to start on displays whose friendly monitor name differs from the Windows display ID, including fullscreen Chrome/YouTube.
 
           These preview builds are not notarized or signed with a paid developer certificate. The operating system may require approval on first launch. The Source ZIP contains the exact application source used to build this release; the Build Info JSON files record each platform's dependency versions. See THIRD_PARTY_NOTICES.md and the included dependency notices for dependency licenses and sources. SHA256SUMS.txt lists download checksums.
           NOTES

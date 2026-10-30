@@ -104,7 +104,7 @@ class WindowsProbeTests(unittest.TestCase):
             with self.subTest(client=client):
                 self.clients[1] = client
                 self.assertIs(self.detector._windows(self.screen), expected)
-        self.detector._windows_monitor.assert_called_with(self.screen)
+        self.detector._windows_monitor.assert_called_with()
 
     def test_missing_foreground_own_pet_and_transient_menu_are_unknown(self):
         self.user32.foreground = 0
@@ -152,6 +152,95 @@ class WindowsProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Monitor disconnected"):
             self.detector._windows(self.screen)
         self.assertEqual(dpi.call_args_list[-1].args, (77,))
+
+
+class FakeMonitorInfo(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+
+class WindowsMonitorTests(unittest.TestCase):
+    """Exercise native monitor lookup instead of mocking the broken boundary."""
+
+    def setUp(self):
+        self.detector = object.__new__(FullScreenDetector)
+        self.detector.error = None
+        self.detector._pid = 123
+        self.detector._wt = wintypes
+        self.detector._MonitorInfo = FakeMonitorInfo
+        self.detector._set_dpi_context = None
+        self.detector._dwmapi = FakeDwm()
+        self.detector._user32 = self.user32 = FakeUser32()
+        self.detector._window = self.window = Mock()
+        # QScreen.name() may be a friendly hardware name, not \\.\DISPLAY1.
+        self.window.screen.return_value.name.return_value = "DELL U2720Q (2)"
+        self.hwnd = 0x1234567887654321
+        self.window.winId.return_value = self.hwnd
+        self.window_monitors = {self.hwnd: 100}
+        self.monitor_bounds = {100: (0, 0, 3840, 2160)}
+        self.user32.MonitorFromWindow = Mock(
+            side_effect=lambda hwnd, flags: self.window_monitors.get(hwnd, 0))
+        self.user32.GetMonitorInfoW = Mock(side_effect=self.read_monitor_info)
+        self.detector._windows_client = Mock(return_value=(0, 0, 3840, 2160))
+        self.detector._probe = self.detector._windows
+        self.screen = object()
+
+    def read_monitor_info(self, monitor, pointer):
+        bounds = self.monitor_bounds.get(monitor)
+        if bounds is None:
+            return False
+        info = pointer._obj
+        self.assertEqual(info.cbSize, ctypes.sizeof(FakeMonitorInfo))
+        x, y, width, height = bounds
+        info.rcMonitor = wintypes.RECT(x, y, x + width, y + height)
+        info.rcWork = wintypes.RECT(x, y, x + width, y + height - 48)
+        return True
+
+    def test_friendly_monitor_name_does_not_prevent_native_screen_lookup(self):
+        self.assertEqual(self.detector._windows_monitor(), (0, 0, 3840, 2160))
+        self.user32.MonitorFromWindow.assert_called_once_with(self.hwnd, 2)
+        self.assertTrue(self.detector.is_fullscreen(self.screen))
+
+    def test_negative_mixed_scale_monitor_uses_full_native_bounds(self):
+        # Its logical size at 150% would be 1707x960; fullscreen comparisons
+        # must use the native 2560x1440 rectangle, including a negative origin.
+        bounds = (-2560, -240, 2560, 1440)
+        self.monitor_bounds[100] = bounds
+        self.detector._windows_client.return_value = bounds
+        self.assertEqual(self.detector._windows_monitor(), bounds)
+        self.assertTrue(self.detector.is_fullscreen(self.screen))
+        self.detector._windows_client.return_value = (0, 0, 3840, 2160)
+        self.assertFalse(self.detector.is_fullscreen(self.screen))
+
+    def test_current_window_handle_is_read_again_after_window_recreation(self):
+        replacement = self.hwnd + 1
+        self.window_monitors[replacement] = 200
+        self.monitor_bounds[200] = (-1920, 0, 1920, 1080)
+        self.assertEqual(self.detector._windows_monitor(), (0, 0, 3840, 2160))
+        self.window.winId.return_value = replacement
+        self.assertEqual(self.detector._windows_monitor(), (-1920, 0, 1920, 1080))
+        self.assertEqual(self.user32.MonitorFromWindow.call_args.args, (replacement, 2))
+
+    def test_missing_pet_window_or_native_handle_is_unknown(self):
+        self.detector._window = None
+        self.assertIsNone(self.detector.is_fullscreen(self.screen))
+        self.assertIsNotNone(self.detector.error)
+        self.detector._window = self.window
+        self.window.winId.return_value = 0
+        self.assertIsNone(self.detector.is_fullscreen(self.screen))
+        self.assertIsNotNone(self.detector.error)
+
+    def test_missing_monitor_or_failed_monitor_info_is_unknown_and_recovers(self):
+        self.window_monitors.clear()
+        self.assertIsNone(self.detector.is_fullscreen(self.screen))
+        self.assertIsNotNone(self.detector.error)
+        self.window_monitors[self.hwnd] = 100
+        self.monitor_bounds.clear()
+        self.assertIsNone(self.detector.is_fullscreen(self.screen))
+        self.assertIsNotNone(self.detector.error)
+        self.monitor_bounds[100] = (0, 0, 3840, 2160)
+        self.assertTrue(self.detector.is_fullscreen(self.screen))
+        self.assertIsNone(self.detector.error)
 
 
 if __name__ == "__main__":
