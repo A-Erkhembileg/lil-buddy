@@ -197,10 +197,11 @@ jobs:
             echo "Release $RELEASE_TAG already exists and was left unchanged. Increase APP_VERSION for a new release."
             exit 0
           fi
-          existing_commit="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha 2>/dev/null || true)"
-          if [ -n "$existing_commit" ] && [ "$existing_commit" != "$RELEASE_COMMIT" ]; then
-            echo "Tag $RELEASE_TAG already points to another commit; refusing to publish mismatched binaries." >&2
-            exit 1
+          if existing_commit="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha 2>/dev/null)"; then
+            if [ "$existing_commit" != "$RELEASE_COMMIT" ]; then
+              echo "Tag $RELEASE_TAG already points to another commit; refusing to publish mismatched binaries." >&2
+              exit 1
+            fi
           fi
           cat > release-notes.md <<'NOTES'
           A pixel-art desktop companion for macOS and Windows, with Cat, Crow, Dog, and Fox.
