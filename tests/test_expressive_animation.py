@@ -243,9 +243,14 @@ class ExpressiveArtTests(unittest.TestCase):
                         self.assertEqual((pixmap.width(), pixmap.height()), (pet.WIDTH, pet.HEIGHT))
                         self.assertFalse(pixmap.mask().isNull())
                         image = pixmap.toImage()
-                        self.assertTrue(any(image.pixelColor(x, y).name() == palette.fur
-                                            and image.pixelColor(x, y).alpha()
-                                            for y in range(pet.HEIGHT) for x in range(pet.WIDTH)))
+                        colors = [image.pixelColor(x,y) for y in range(pet.HEIGHT)
+                                  for x in range(pet.WIDTH) if image.pixelColor(x,y).alpha()>200]
+                        if name == "Natural Coat":
+                            self.assertGreater(len({c.name() for c in colors}), 40)
+                        else:
+                            target = QColor(palette.fur)
+                            self.assertTrue(any(max(abs(c.red()-target.red()),abs(c.green()-target.green()),
+                                                    abs(c.blue()-target.blue())) < 18 for c in colors))
 
 
 if __name__ == "__main__":

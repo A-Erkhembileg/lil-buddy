@@ -207,7 +207,8 @@ class CrowInteractionTests(unittest.TestCase):
                 color = image.pixelColor(x, y)
                 if not color.alpha():
                     continue
-                if x < image.width() // 3 and min(color.red(), color.green(), color.blue()) > 200:
+                if (x < image.width() * 0.45 and color.red() > 230
+                        and color.green() > 210 and color.blue() > 165):
                     white_tail += 1
                 if color.red() > 110 and color.red() > color.green() * 1.3 and color.red() > color.blue() * 1.5:
                     russet += 1

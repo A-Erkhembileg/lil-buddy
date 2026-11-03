@@ -1,5 +1,6 @@
 """Packaging configuration checks; do not build or publish applications."""
 from pathlib import Path
+import ast
 import tempfile
 import unittest
 import zipfile
@@ -37,6 +38,32 @@ class BuildConfigurationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             render_spec("linux", self.root, self.icons)
 
+    def test_native_apps_bundle_all_runtime_animal_artwork_with_optional_licenses(self):
+        expected_artwork = {
+            (str(self.root / "artwork" / name), "artwork") for name in (
+                "cat-character-sheet.png", "dog-character-sheet.png",
+                "fox-character-model.png", "fox-walk-sheet.png", "fox-expression-sheet.png")}
+        for host in ("darwin", "win32"):
+            for notices in (None, self.root / "notices"):
+                with self.subTest(host=host, notices=notices):
+                    tree = ast.parse(render_spec(host, self.root, self.icons, notices))
+                    analysis = next(node for node in ast.walk(tree)
+                                    if isinstance(node, ast.Call)
+                                    and isinstance(node.func, ast.Name)
+                                    and node.func.id == "Analysis")
+                    datas = ast.literal_eval(next(item.value for item in analysis.keywords
+                                                  if item.arg == "datas"))
+                    expected = expected_artwork | ({(str(notices), "Licenses")} if notices else set())
+                    self.assertEqual(set(datas), expected)
+
+    def test_runtime_animal_artwork_exists_as_png_files(self):
+        for name in ("cat-character-sheet.png", "dog-character-sheet.png",
+                     "fox-character-model.png", "fox-walk-sheet.png", "fox-expression-sheet.png"):
+            with self.subTest(asset=name):
+                path = ROOT / "artwork" / name
+                self.assertTrue(path.is_file(), f"Missing runtime artwork: {path}")
+                self.assertTrue(path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+
     def test_windows_archive_contains_executable_and_installation_notes(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
@@ -61,6 +88,9 @@ class BuildConfigurationTests(unittest.TestCase):
             with zipfile.ZipFile(notices / "Application-Source.zip") as source:
                 self.assertEqual(source.read("desktop_cat.py"), (ROOT / "desktop_cat.py").read_bytes())
                 self.assertIn("tools/build_app.py", source.namelist())
+                for name in ("cat-character-sheet.png", "dog-character-sheet.png",
+                             "fox-character-model.png", "fox-walk-sheet.png", "fox-expression-sheet.png"):
+                    self.assertEqual(source.read("artwork/" + name), (ROOT / "artwork" / name).read_bytes())
                 self.assertFalse(any(".venv" in name or name.startswith("build/") for name in source.namelist()))
             self.assertEqual(json.loads((notices / "build-info.json").read_text())["version"], APP_VERSION)
             executable = folder / "Lil Buddy.exe"

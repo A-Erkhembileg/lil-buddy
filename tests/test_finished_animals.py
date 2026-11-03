@@ -68,7 +68,10 @@ class FinishedAnimalArtTests(unittest.TestCase):
                             pet.ART_WIDTH, pet.ART_HEIGHT, Qt.AspectRatioMode.IgnoreAspectRatio,
                             Qt.TransformationMode.FastTransformation)
                         color = QColor(palette.fur)
-                        self.assertTrue(any(image.pixelColor(x, y) == color
+                        self.assertTrue(any(image.pixelColor(x,y).alpha()>100 and
+                                            max(abs(image.pixelColor(x,y).red()-color.red()),
+                                                abs(image.pixelColor(x,y).green()-color.green()),
+                                                abs(image.pixelColor(x,y).blue()-color.blue())) < 18
                                             for y in range(image.height()) for x in range(image.width())))
 
     def test_walking_and_habits_mirror_with_the_direction_of_travel(self):

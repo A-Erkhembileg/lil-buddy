@@ -1,0 +1,446 @@
+{
+  "format_version": 2,
+  "animal": "cat",
+  "image": "cat-sprites-atlas.png",
+  "cell_size": [
+    400,
+    320
+  ],
+  "columns": 6,
+  "clips": {
+    "rest": [
+      {
+        "frame": 0,
+        "rect": [
+          0,
+          0,
+          400,
+          320
+        ],
+        "duration_ms": 600
+      }
+    ],
+    "blink": [
+      {
+        "frame": 0,
+        "rect": [
+          400,
+          0,
+          400,
+          320
+        ],
+        "duration_ms": 140
+      }
+    ],
+    "walk": [
+      {
+        "frame": 0,
+        "rect": [
+          800,
+          0,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      },
+      {
+        "frame": 1,
+        "rect": [
+          1200,
+          0,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      },
+      {
+        "frame": 2,
+        "rect": [
+          1600,
+          0,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      },
+      {
+        "frame": 3,
+        "rect": [
+          2000,
+          0,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      },
+      {
+        "frame": 4,
+        "rect": [
+          0,
+          320,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      },
+      {
+        "frame": 5,
+        "rect": [
+          400,
+          320,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      }
+    ],
+    "sleep": [
+      {
+        "frame": 0,
+        "rect": [
+          800,
+          320,
+          400,
+          320
+        ],
+        "duration_ms": 800
+      },
+      {
+        "frame": 1,
+        "rect": [
+          1200,
+          320,
+          400,
+          320
+        ],
+        "duration_ms": 800
+      }
+    ],
+    "held": [
+      {
+        "frame": 0,
+        "rect": [
+          1600,
+          320,
+          400,
+          320
+        ],
+        "duration_ms": 65
+      },
+      {
+        "frame": 1,
+        "rect": [
+          2000,
+          320,
+          400,
+          320
+        ],
+        "duration_ms": 65
+      },
+      {
+        "frame": 2,
+        "rect": [
+          0,
+          640,
+          400,
+          320
+        ],
+        "duration_ms": 65
+      },
+      {
+        "frame": 3,
+        "rect": [
+          400,
+          640,
+          400,
+          320
+        ],
+        "duration_ms": 65
+      }
+    ],
+    "fall": [
+      {
+        "frame": 0,
+        "rect": [
+          800,
+          640,
+          400,
+          320
+        ],
+        "duration_ms": 65
+      },
+      {
+        "frame": 1,
+        "rect": [
+          1200,
+          640,
+          400,
+          320
+        ],
+        "duration_ms": 65
+      },
+      {
+        "frame": 2,
+        "rect": [
+          1600,
+          640,
+          400,
+          320
+        ],
+        "duration_ms": 65
+      },
+      {
+        "frame": 3,
+        "rect": [
+          2000,
+          640,
+          400,
+          320
+        ],
+        "duration_ms": 65
+      }
+    ],
+    "petted": [
+      {
+        "frame": 0,
+        "rect": [
+          0,
+          960,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      },
+      {
+        "frame": 1,
+        "rect": [
+          400,
+          960,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      },
+      {
+        "frame": 2,
+        "rect": [
+          800,
+          960,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      },
+      {
+        "frame": 3,
+        "rect": [
+          1200,
+          960,
+          400,
+          320
+        ],
+        "duration_ms": 90
+      }
+    ],
+    "land": [
+      {
+        "frame": 0,
+        "rect": [
+          1600,
+          960,
+          400,
+          320
+        ],
+        "duration_ms": 60
+      },
+      {
+        "frame": 1,
+        "rect": [
+          2000,
+          960,
+          400,
+          320
+        ],
+        "duration_ms": 60
+      },
+      {
+        "frame": 2,
+        "rect": [
+          0,
+          1280,
+          400,
+          320
+        ],
+        "duration_ms": 60
+      }
+    ],
+    "groom": [
+      {
+        "frame": 0,
+        "rect": [
+          400,
+          1280,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 1,
+        "rect": [
+          800,
+          1280,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 2,
+        "rect": [
+          1200,
+          1280,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 3,
+        "rect": [
+          1600,
+          1280,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      }
+    ],
+    "yawn": [
+      {
+        "frame": 0,
+        "rect": [
+          2000,
+          1280,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 1,
+        "rect": [
+          0,
+          1600,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 2,
+        "rect": [
+          400,
+          1600,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 3,
+        "rect": [
+          800,
+          1600,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      }
+    ],
+    "stretch": [
+      {
+        "frame": 0,
+        "rect": [
+          1200,
+          1600,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 1,
+        "rect": [
+          1600,
+          1600,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 2,
+        "rect": [
+          2000,
+          1600,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 3,
+        "rect": [
+          0,
+          1920,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      }
+    ],
+    "watch": [
+      {
+        "frame": 0,
+        "rect": [
+          400,
+          1920,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 1,
+        "rect": [
+          800,
+          1920,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 2,
+        "rect": [
+          1200,
+          1920,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      },
+      {
+        "frame": 3,
+        "rect": [
+          1600,
+          1920,
+          400,
+          320
+        ],
+        "duration_ms": 180
+      }
+    ]
+  }
+}

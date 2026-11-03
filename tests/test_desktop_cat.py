@@ -234,18 +234,19 @@ class WidgetTests(unittest.TestCase):
         self.assertTrue(bubble.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus)
         self.assertTrue(bubble.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents))
 
-    def test_neon_eyes_widen_when_held_and_gait_has_two_distinct_poses(self):
+    def test_reference_cat_keeps_green_eyes_and_distinct_air_and_walk_poses(self):
         def green_pixels(pixmap):
             image = pixmap.toImage()
-            return sum(image.pixelColor(x, y).green() > 190
-                       and image.pixelColor(x, y).red() < 190
-                       and image.pixelColor(x, y).blue() < 180
+            return sum(image.pixelColor(x, y).green() > 50
+                       and image.pixelColor(x, y).green() > image.pixelColor(x, y).red() * 1.03
+                       and image.pixelColor(x, y).green() > image.pixelColor(x, y).blue() * 1.3
                        and image.pixelColor(x, y).alpha() != 0
                        for y in range(HEIGHT) for x in range(WIDTH))
         rest = draw_cat("rest", 0, 1)
         held = draw_cat("held", 0, 1)
         self.assertGreater(green_pixels(rest), 0)
-        self.assertGreater(green_pixels(held), green_pixels(rest))
+        self.assertGreater(green_pixels(held), 0)
+        self.assertNotEqual(held.toImage(), rest.toImage())
         self.assertNotEqual(draw_cat("walk", 0, 1).toImage(), draw_cat("walk", 1, 1).toImage())
         self.assertEqual(self.cat.timer.interval(), 16)
 

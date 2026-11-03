@@ -1,14 +1,15 @@
 # Lil Buddy
 
-A quiet pixel pet for macOS and Windows. Choose a cat, domestic retriever, wild
-fox, or black crow. Every animal is drawn and animated in code, with no image files,
-AI service, account, or internet connection needed at runtime.
+A quiet desktop pet for macOS and Windows. Choose an orange tabby cat, a husky,
+a detailed golden-orange fox, or a black crow. Cat, Dog, and Fox use bundled
+character artwork directly so their faces, fur, and proportions remain detailed
+through animation. No AI service, account, or internet connection is needed at runtime.
 
 Free to download, use, modify, and share. Original project source and artwork
 use the [MIT License](LICENSE). Packaged applications combine Lil Buddy with
 PyQt6 and are distributed under GPL version 3; see [Licensing](#licensing).
 
-![Crow, dog, and fox sprite sheet](artwork/animal-sprite-sheet.png)
+![Cat, husky, and fox character models](artwork/character-models-preview.png)
 
 ## Download and install
 
@@ -50,9 +51,11 @@ Right-click the pet, or use its menu-bar/tray icon:
 - **Change Color:** Natural Coat, Charcoal Grey, Tuxedo Black, Calico Orange, or Custom RGB.
   RGB previews live; Cancel restores the previous choice.
 - **Animal Type:** Cat, Dog, Fox, or Crow, each with its own animations and quotes.
-  Dog, fox, and crow use independently drawn side-view anatomy on a finer pixel
-  grid. Natural Coat gives the crow black feathers and bill, the dog a fawn coat,
-  and the fox russet fur with dark stockings and a white chest and tail tip.
+  Natural Coat preserves the supplied tabby's orange stripes and green eyes,
+  the husky's charcoal-and-white coat and blue eyes, and the fox's orange/gold
+  fur, purple eyes, cream bib, and full curved tail. Cat and Fox have six walking
+  frames; Dog uses the four supplied walking frames. All three sit at rest and
+  use their supplied petting, airborne, sleeping, and grooming poses.
 - **Take flight:** available for Crow. Eight wing phases accompany momentum,
   flap-driven lift, air drag, gentle steering, and a controlled descent. A crow
   can also take short spontaneous flights during idle habits. Releasing it
@@ -132,19 +135,29 @@ py -3 -m venv .venv
 ```
 
 Skip virtual-environment creation if `.venv` exists. Cocoa is installed only on
-macOS. The runtime remains consolidated in `desktop_cat.py`; `tools/` and
-`packaging/` contain only build tooling and app icons.
+macOS. The runtime remains consolidated in `desktop_cat.py`; keep the `artwork/`
+folder beside it when running from source. Native app downloads already bundle
+all required artwork. `tools/` and `packaging/` contain build tooling and app icons.
 
 ## Sprite sheets and flight preview
 
-`artwork/animal-sprite-sheet.png` shows the crow, dog, and fox on a solid
-background. The crow row contains its perch and all eight flight phases; the
-canine rows contain their rest, six walking phases, petting, and sleep poses.
+`artwork/animal-sprite-sheet.png` shows all four animals on a solid background.
+The crow row contains its perch and all eight flight phases; the other rows
+show their supplied character poses and walking cycles.
 `artwork/crow-flight.gif` previews the complete wing cycle.
 
-The transparent 60 by 48 pixel frame atlas, JSON clip definitions, and crow flight
-strip are also in `artwork/`. These are exports of the actual in-code renderers,
-so the running app requires no image files. Regenerate them with:
+Each detailed animal has its own transparent 400 by 320 frame atlas and JSON clip
+definitions. Crow retains its 60 by 48 pixel grid. `animal-sprites-atlas.json`
+indexes all four animal atlases. Preview motion in
+[cat-animations.gif](artwork/cat-animations.gif),
+[dog-animations.gif](artwork/dog-animations.gif), and
+[fox-animations.gif](artwork/fox-animations.gif).
+
+The [fox character model](artwork/fox-character-model.png) was created with image
+generation from the supplied visual reference. Its original pixels and detailed
+pose sheets are the runtime artwork, alongside the supplied Cat and Dog sheets.
+The [generation prompt](artwork/fox-character-model-prompt.md) is included.
+Previews and atlases are exports of the actual app renderer. Regenerate them with:
 
 ```sh
 ./.venv/bin/python -B tools/export_sprite_sheet.py

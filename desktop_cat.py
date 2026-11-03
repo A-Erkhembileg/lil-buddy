@@ -860,32 +860,10 @@ def _draw_cat_expression(pose: str, frame: int, direction: int, palette: Palette
         Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.FastTransformation)
 
 
-def draw_cat(pose: str, frame: int, direction: int, tail_offset: int = 0,
-             breath: int = 0, dangle: int = 0,
-             palette: Palette = PALETTES["Charcoal Grey"], stretch: int = 0,
-             effects: bool = True) -> QPixmap:
-    """Cat grid renderer: ordinary poses, four-frame reactions and grounded impacts."""
-    if pose in HABIT_DURATIONS:
-        return draw_cat_habit(pose, frame, direction, tail_offset, breath, dangle, palette, stretch)
-    if pose in ("held", "fall", "pet", "petted"):
-        return _draw_cat_expression(pose, frame, direction, palette, stretch, effects)
-    if pose == "land":
-        # The last row remains the foot anchor through squash, rebound and settle.
-        base = _draw_cat_classic("rest", 0, direction, 0, 0, 0, palette)
-        source = base.toImage().scaled(ART_WIDTH, ART_HEIGHT,
-            Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.FastTransformation)
-        image = QImage(ART_WIDTH, ART_HEIGHT, QImage.Format.Format_ARGB32)
-        image.fill(Qt.GlobalColor.transparent)
-        height, width = ((23, 40), (32, 36), (32, 40))[frame % 3]
-        resized = source.scaled(width, height, Qt.AspectRatioMode.IgnoreAspectRatio,
-                                Qt.TransformationMode.FastTransformation)
-        p = QPainter(image)
-        p.drawImage((ART_WIDTH-width)//2, ART_HEIGHT-height, resized)
-        p.end()
-        return QPixmap.fromImage(image).scaled(WIDTH, HEIGHT,
-            Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.FastTransformation)
-    return _draw_cat_classic(pose, frame, direction, tail_offset, breath, dangle, palette)
-
+def draw_cat(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
+             palette=PALETTES["Natural Coat"], stretch=0, effects=True, target_size=None):
+    return _asset_pixmap("Cat",pose,frame,direction,tail_offset,breath,dangle,
+                         palette,stretch,effects,target_size)
 
 class _PetGrid:
     """Pixel primitives shared by the species; all motion remains in the engine."""
@@ -981,12 +959,12 @@ def _natural_colors(animal, palette):
                         light="#546b7b", cream="#222f3c", eye="#050809", glint="#c4d0cf",
                         nose="#10171c", pink="#6f7180", pattern="natural")
         if animal == "Fox":
-            return dict(ink="#28241f", fur="#c66b2c", shade="#93451f", highlight="#eaa05a",
-                        light="#f0bc7e", cream="#efe6d2", eye="#201d17", glint="#e5ca87",
-                        nose="#191b19", pink="#b67c6e", pattern="natural")
-        return dict(ink="#29251f", fur="#b88a58", shade="#815a38", highlight="#d3ad7b",
-                    light="#e4c998", cream="#e5dbc7", eye="#1b1b16", glint="#ede7d3",
-                    nose="#24261f", pink="#b87579", pattern="natural")
+            return dict(ink="#743825", fur="#f5852b", shade="#d65a2c", highlight="#ffb63e",
+                        light="#ffd679", cream="#fff0d8", eye="#38234e", glint="#fff7ed",
+                        nose="#302337", pink="#cf6b85", pattern="natural")
+        return dict(ink="#684329", fur="#dba353", shade="#b77939", highlight="#f3c979",
+                    light="#ffe3a6", cream="#ffe8bd", eye="#30251f", glint="#fff6d8",
+                    nose="#382b27", pink="#e69291", pattern="natural")
     return dict(ink=palette.ink, fur=palette.fur, shade=palette.shade,
                 highlight=palette.highlight, light=palette.muzzle,
                 cream="#efe6d2" if animal == "Fox" else palette.muzzle,
@@ -1051,180 +1029,195 @@ def _side_eye(g, x, y, colors, closed=False, vertical=0, wide=False):
         g.box(x+1,y+max(0,min(1,vertical)),1,1,colors["glint"])
 
 
+def _dog_paw(g, root, foot, colors, far=False, hind=False):
+    """Broad furred legs with a small hock and a rounded, weight-bearing paw."""
+    rx, ry = root
+    fx, fy = foot
+    bend = -2 if hind else 0
+    knee_x, knee_y = rx + bend, ry + max(2, (fy-ry)//2)
+    fill = colors["shade"] if far else colors["fur"]
+    g.poly([(rx-3,ry),(rx+3,ry),(knee_x+2,knee_y),(fx+2,fy-3),
+            (fx+4,fy-2),(fx+4,fy),(fx-3,fy),(fx-3,fy-3),
+            (knee_x-2,knee_y)], colors["ink"])
+    g.box(fx-3,fy,8,1,colors["ink"])
+    g.poly([(rx-2,ry),(rx+2,ry),(knee_x+1,knee_y),(fx+1,fy-3),
+            (fx+3,fy-2),(fx+3,fy-1),(fx-2,fy-1),(fx-2,fy-3),
+            (knee_x-1,knee_y)], fill)
+    g.box(fx-1,fy-2,4,2,colors["shade"] if far else colors["cream"])
+    if not far:
+        g.box(fx+1,fy-1,1,1,colors["shade"])
+
+
+def _dog_head(g, colors, pose, phase, dangle=0):
+    """Rounded retriever skull, a broad projecting muzzle, and a hanging ear."""
+    c = colors
+    happy = pose in ("petted", "pet")
+    # The far ear is rounded too; there are no upright, cat-like ear points.
+    g.poly([(44,14),(48,14),(51,17),(51,24),(48,28),(44,26)],c["ink"])
+    g.poly([(45,15),(48,15),(50,18),(50,23),(48,26),(45,24)],c["shade"])
+    g.poly([(37,15),(41,12),(47,12),(51,15),(53,20),(53,23),
+            (57,24),(59,26),(59,30),(56,33),(48,33),(44,35),
+            (38,32),(35,27),(35,20)],c["ink"])
+    g.poly([(38,16),(42,13),(47,13),(50,16),(52,20),(52,24),
+            (56,25),(58,27),(58,30),(55,32),(48,32),(44,33),
+            (39,31),(36,27),(36,20)],c["fur"])
+    g.poly([(40,15),(44,14),(48,15),(50,18),(47,18),(44,17),
+            (40,18)],c["highlight"])
+    g.poly([(46,25),(50,23),(54,24),(57,26),(58,28),(57,31),
+            (53,32),(47,31),(44,29)],c["cream"])
+    g.box(55,26,4,3,c["nose"])
+    g.box(55,26,1,1,c["light"])
+    g.line([(49,30),(52,31),(55,30)],c["ink"])
+    # Large soft floppy ear hangs below the cheek in a separate, readable mass.
+    g.poly([(37,15),(41,16),(44,20),(43,28),(41,33),(37,34),
+            (34,31),(33,25),(34,19)],c["ink"])
+    g.poly([(37,17),(40,17),(42,21),(41,28),(40,31),(37,32),
+            (35,30),(34,25),(35,20)],c["shade"])
+    g.poly([(37,19),(39,20),(39,27),(38,29),(36,27),(36,22)],c["highlight"])
+    closed = happy or pose in ("blink", "yawn", "groom", "sleep")
+    if closed:
+        g.line([(46,22),(47,21),(49,21),(50,22)],c["eye"])
+    else:
+        height = 4 if pose in ("held", "fall") else 3
+        g.box(47,20,3,height,c["eye"])
+        g.box(47,20+max(0,min(height-1,1+dangle)),1,1,c["glint"])
+        g.box(46,18,3,1,c["shade"])
+    if pose == "yawn":
+        opening = (2,4,5,3)[phase]
+        g.box(50,30,6,opening,c["ink"])
+        g.box(51,29+opening,4,2,c["pink"])
+    elif happy or pose == "groom":
+        g.box(52,31,3,(2,4,3,1)[phase],c["pink"])
+
+
 def draw_dog(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
-             palette=None, stretch=0) -> QPixmap:
-    """A side-view domestic retriever: long muzzle, hanging ears, jointed legs."""
-    if pose == "land":
-        return _natural_landing(draw_dog,frame,direction,palette)
-    c, g = _natural_colors("Dog",palette), _NaturalGrid()
-    air = pose in ("held","fall")
-    happy = pose in ("petted","pet")
-    walking = pose == "walk"
-    phase = frame % 6 if walking else frame % 4
-    bob = (0,-1,-1,0,1,0)[phase] if walking else (-2 if air else breath)
-    if happy: bob += (0,0,-1,0)[phase]
-    if pose == "sleep":
-        g.poly([(7,37),(13,31),(31,30),(42,33),(50,38),(51,45),(47,47),(10,47),(6,43)],c["ink"])
-        g.poly([(9,37),(15,32),(30,31),(41,34),(48,39),(49,44),(46,46),(11,46),(8,42)],c["fur"])
-        g.poly([(34,36),(40,33),(47,36),(51,40),(49,44),(38,44),(33,40)],c["shade"])
-        g.poly([(41,39),(49,39),(56,42),(55,45),(44,46),(39,43)],c["cream"])
-        g.box(53,41,3,2,c["nose"]);g.line([(43,38),(46,38)],c["ink"])
-        g.line([(10,44),(15,45),(27,45)],c["highlight"])
-        return g.finish(direction)
-    # The tail attaches to the rump and tapers upward, separate from the body.
-    wag = (0,-2,1,2)[phase] if happy else max(-2,min(2,tail_offset))
-    tail = [(17,28+bob),(11,26+bob),(7,22+wag+bob),(4,16+wag+bob),
-            (3,15+wag+bob),(2,17+wag+bob),(4,24+wag+bob),(10,30+bob),(17,32+bob)]
-    g.poly(tail,c["ink"])
-    g.poly([(16,29+bob),(11,27+bob),(6,22+wag+bob),(4,18+wag+bob),
-            (5,24+wag+bob),(11,29+bob),(16,31+bob)],c["fur"])
-    # Six-phase trot: diagonal support pairs and a bent rear hock.
-    strides=(-4,-2,3,4,1,-3)
-    lifts=(0,3,3,0,1,2)
-    if walking:
-        hind=(19+strides[phase],47-lifts[phase])
-        front=(41-strides[phase],47-lifts[(phase+3)%6])
-        hind_far=(24-strides[phase],47-lifts[(phase+3)%6])
-        front_far=(38+strides[phase],47-lifts[phase])
-    elif air:
-        hind,front,hind_far,front_far=(
-            ((16,42),(45,44),(26,45),(37,40)),
-            ((23,45),(38,39),(17,41),(47,45)),
-            ((27,42),(44,40),(20,45),(36,45)),
-            ((17,40),(38,45),(25,43),(47,40)),
-        )[phase]
+             palette=None, stretch=0, target_size=None):
+    return _asset_pixmap("Dog",pose,frame,direction,tail_offset,breath,dangle,
+                         palette,stretch,True,target_size)
+
+def _fox_brush(g, c, pose, wag=0):
+    """A plush brush with a broad cream tip and a clear curved silhouette."""
+    air = pose in ("held", "fall")
+    moving = pose in ("walk", "stretch")
+    if air:
+        outline = [(27,34),(18,30),(12,22),(10,13),(12,5),(16,1),
+                   (19,2),(18,8),(19,15),(24,23),(31,28)]
+        inside = [(27,32),(20,28),(14,21),(12,13),(14,6),(17,3),
+                  (16,9),(17,16),(22,24),(29,29)]
+        tip = [(12,12),(13,6),(16,2),(18,2),(17,8),(18,13),
+               (16,12),(15,15)]
+    elif moving:
+        outline = [(26,32),(19,31),(13,28+wag),(8,22+wag),(7,18+wag),
+                   (4,20+wag),(2,26+wag),(3,33+wag),(8,39+wag),
+                   (16,42),(24,39),(29,35)]
+        inside = [(26,33),(19,32),(12,30+wag),(8,25+wag),(6,21+wag),
+                  (4,26+wag),(5,32+wag),(10,37+wag),(17,40),(24,37)]
+        tip = [(7,19+wag),(5,21+wag),(3,26+wag),(4,30+wag),
+               (6,32+wag),(7,28+wag),(10,30+wag),(9,26+wag)]
     else:
-        hind,front,hind_far,front_far=(19,47),(41,47),(25,47),(37,47)
-    if pose=="groom":front=(45+phase%2,34-phase%2)
-    _canine_leg(g,(23,31+bob),hind_far,c,True)
-    _canine_foreleg(g,(36,29+bob),front_far,c,True)
-    bow = pose == "stretch"
-    body_top = 22+bob if not bow else 23
-    body_bottom = 35+min(3,max(0,stretch)) if air else 35+bob
-    g.poly([(14,27+bob),(18,body_top),(29,21+bob),(38,23+bob),
-            (44,29+bob),(41,body_bottom),(34,body_bottom+1),(20,body_bottom),(14,32+bob)],c["ink"])
-    g.poly([(16,27+bob),(19,body_top+1),(29,22+bob),(37,24+bob),
-            (42,29+bob),(40,body_bottom-1),(33,body_bottom),(21,body_bottom-1),(16,31+bob)],c["fur"])
-    g.line([(20,24+bob),(29,23+bob),(36,25+bob)],c["highlight"])
-    g.poly([(35,28+bob),(40,27+bob),(41,33+bob),(36,36+bob),(31,35+bob)],c["cream"])
-    if c["pattern"]=="calico":g.poly([(20,25+bob),(27,24+bob),(30,28+bob),(26,32+bob),(20,30+bob)],palette.marking)
-    if c["pattern"]=="tuxedo":g.box(34,29+bob,7,6,c["cream"])
-    if bow:
-        g.poly([(15,27),(20,21),(29,24),(41,36),(38,39),(25,34),(16,33)],c["fur"])
-        hind=(19,47);front=(52,47)
-        _canine_leg(g,(20,32),hind,c)
-        _canine_foreleg(g,(37,36),front,c)
+        outline = [(31,43),(27,34),(22,29),(17,22),(16,16+wag),
+                   (18,10+wag),(16,7+wag),(12,8+wag),(8,13+wag),
+                   (5,20+wag),(3,29),(3,37),(7,43),(14,47),(25,47),(32,45)]
+        inside = [(29,43),(26,35),(20,30),(15,23),(14,16+wag),
+                  (16,10+wag),(13,10+wag),(10,14+wag),(7,21+wag),
+                  (5,29),(5,36),(9,42),(15,45),(25,45)]
+        tip = [(16,8+wag),(12,10+wag),(9,14+wag),(7,20+wag),
+               (8,24+wag),(10,21+wag),(13,24+wag),(12,18+wag),
+               (15,20+wag),(15,15+wag),(17,11+wag)]
+    g.poly(outline, c["ink"])
+    g.poly(inside, c["fur"])
+    if not air:
+        if moving:
+            g.poly([(6,30+wag),(10,35+wag),(17,38),(24,36),(23,39),
+                    (16,41),(9,38+wag)], c["shade"])
+            g.line([(10,30+wag),(14,34+wag),(20,35)], c["highlight"])
+        else:
+            g.poly([(5,31),(10,36),(18,38),(26,36),(28,42),
+                    (24,45),(15,45),(9,41),(5,36)], c["shade"])
+            g.poly([(7,26),(10,20+wag),(13,19+wag),(16,26),
+                    (21,31),(17,31),(13,28),(12,32),(9,29)], c["highlight"])
+            g.line([(9,35),(14,39),(23,41)], c["fur"])
+    g.poly(tip, c["cream"])
+    if not moving and not air:
+        g.poly([(13,11+wag),(11,16+wag),(10,20+wag),(13,19+wag),
+                (14,21+wag),(13,15+wag),(16,11+wag)], c["light"])
+
+
+def _fox_face(g, c, pose, phase, origin, dangle=0):
+    """The reference fox's tall ears, cheek ruff, pointed nose and glossy eyes."""
+    air = pose in ("held", "fall")
+    happy = pose in ("petted", "pet")
+    g.p.save()
+    g.p.translate(*origin)
+    if air:
+        outline = [(0,16),(1,11),(-2,8),(0,6),(8,9),(14,8),(21,6),
+                   (24,9),(21,13),(23,15),(28,17),(29,19),(26,22),
+                   (19,25),(10,26),(3,23)]
     else:
-        _canine_leg(g,(20,31+bob),hind,c)
-        _canine_foreleg(g,(40,30+bob),front,c)
-    # The skull is smaller than the chest and a clear muzzle projects beyond it.
-    hx=(0,1,0,-1)[phase] if happy else (-2 if pose=="groom" else 0)
-    hy=bob+(7 if bow else 0)+(1 if pose=="groom" else 0)
-    if pose=="watch":hy+=max(-1,min(1,dangle))
-    g.p.save();g.p.translate(hx,hy)
-    g.poly([(36,23),(37,16),(40,12),(47,12),(51,15),(52,20),
-            (57,22),(59,24),(59,27),(56,29),(47,28),(43,29),(38,27)],c["ink"])
-    g.poly([(38,22),(39,17),(41,13),(47,13),(50,16),(51,21),
-            (56,23),(58,24),(58,26),(55,28),(47,27),(43,28),(39,26)],c["fur"])
-    g.poly([(46,22),(52,21),(57,23),(58,24),(58,26),(54,28),(47,27),(44,25)],c["cream"])
-    g.poly([(39,15),(42,14),(45,17),(45,23),(43,28),(40,29),(37,26),(36,21)],c["ink"])
-    g.poly([(39,16),(42,16),(44,18),(43,24),(42,27),(40,27),(38,24),(38,20)],c["shade"])
-    g.line([(40,18),(41,24)],c["highlight"])
-    _side_eye(g,47,18,c,closed=happy or pose in ("blink","yawn","groom"),vertical=dangle,wide=air)
-    g.box(56,23,3,3,c["nose"]);g.box(56,23,1,1,c["highlight"])
-    g.line([(49,27),(54,27),(56,26)],c["ink"])
-    if pose=="yawn":
-        opening=(1,3,5,2)[phase]
-        g.box(50,26,7,opening,c["ink"]);g.box(51,26+opening-1,4,2,c["pink"])
-    elif happy or pose=="groom":
-        g.box(52,27,3,(2,4,3,1)[phase],c["pink"])
+        outline = [(0,17),(1,10),(3,2),(5,0),(10,9),(14,8),(17,2),
+                   (19,3),(20,11),(23,15),(28,17),(29,19),
+                   (26,22),(19,25),(10,26),(3,23)]
+    g.poly(outline, c["ink"])
+    if air:
+        fill = [(1,16),(3,12),(0,8),(7,11),(14,10),(21,8),(22,9),
+                (19,13),(22,16),(27,18),(27,20),(24,22),(18,24),(10,25),(4,22)]
+    else:
+        fill = [(1,17),(3,11),(5,4),(9,12),(14,10),(18,6),(19,14),
+                (22,16),(27,18),(27,20),(24,22),(18,24),(10,25),(4,22)]
+    g.poly(fill, c["fur"])
+    if not air:
+        g.poly([(4,5),(5,4),(8,12),(5,15),(3,14)], c["cream"])
+        g.poly([(17,6),(18,5),(19,12),(16,11)], c["shade"])
+        g.line([(3,17),(5,11),(8,10)], c["highlight"])
+    else:
+        g.poly([(0,8),(5,10),(2,12)], c["shade"])
+        g.poly([(18,9),(21,8),(20,11)], c["shade"])
+    g.poly([(2,19),(6,17),(11,17),(16,20),(22,20),(27,18),
+            (27,21),(23,23),(17,25),(10,26),(5,23),(2,23),(4,21)], c["cream"])
+    g.poly([(9,10),(14,10),(19,14),(22,17),(17,18),(13,15),(9,15)], c["highlight"])
+    closed = happy or pose in ("blink", "groom", "yawn", "sleep")
+    for ex, ey, far in ((12,13,True),(20,14,False)):
+        if closed:
+            g.line([(ex-1,ey+2),(ex,ey+1),(ex+2,ey+1),(ex+3,ey+2)], c["eye"])
+        else:
+            width, height = (3,4) if far else (4,5) if air else (4,4)
+            g.box(ex,ey,width,height,c["eye"])
+            g.box(ex+1,ey-1,width-2,1,c["eye"])
+            g.box(ex+1,ey+max(0,min(2,1+dangle)),1,2,c["glint"])
+            if not far:
+                g.box(ex+2,ey+height-1,1,1,c["pink"])
+    g.box(27,17,3,2,c["nose"])
+    g.box(28,17,1,1,c["glint"])
+    g.line([(22,23),(25,22)],c["ink"])
+    if pose == "yawn":
+        opening = (1,3,4,2)[phase]
+        g.box(23,22,4,opening,c["nose"])
+        g.box(24,22+opening-1,2,1,c["pink"])
+    elif happy and phase % 2:
+        g.box(24,23,2,2,c["pink"])
     g.p.restore()
-    if pose=="groom":_canine_foreleg(g,(39,32),(45+phase%2,34-phase%2),c)
-    if happy:g.heart(8+phase,9-phase);g.heart(51,6+phase%2)
-    return g.finish(direction)
+
+
+def _fox_paw(g, c, root, foot, far=False, hind=False):
+    """Short, solid furred limbs; dark stockings stay attached to the paws."""
+    rx, ry = root
+    fx, fy = foot
+    knee = rx - 2 if hind else rx
+    shade = c["shade"] if far else c["fur"]
+    g.poly([(rx-2,ry),(rx+2,ry),(knee+2,ry+4),(fx+1,fy-3),
+            (fx+3,fy-1),(fx+3,fy),(fx-2,fy),(fx-2,fy-3),(knee-2,ry+4)],c["ink"])
+    g.poly([(rx-1,ry),(rx+1,ry),(knee+1,ry+4),(fx,fy-2),
+            (fx-1,fy-2),(knee-1,ry+4)],shade)
+    g.poly([(fx-1,fy-5),(fx+1,fy-5),(fx+1,fy-2),
+            (fx+2,fy-1),(fx+2,fy),(fx-2,fy),(fx-1,fy-2)],c["ink"])
+    g.box(fx,fy-1,1,1,c["shade"])
+    g.box(fx-2,fy,5,1,c["ink"])
 
 
 def draw_fox(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
-             palette=None, stretch=0) -> QPixmap:
-    """A slender wild red fox with narrow muzzle, black stockings and a white brush tip."""
-    if pose=="land":return _natural_landing(draw_fox,frame,direction,palette)
-    c,g=_natural_colors("Fox",palette),_NaturalGrid()
-    walking=pose=="walk";air=pose in ("held","fall");happy=pose in ("petted","pet")
-    phase=frame%6 if walking else frame%4
-    bob=(0,-1,-1,0,1,0)[phase] if walking else (-2 if air else breath)
-    if pose=="sleep":
-        g.poly([(6,36),(12,31),(29,30),(41,34),(47,40),(44,46),(9,47),(4,43)],c["ink"])
-        g.poly([(8,36),(14,32),(29,31),(40,35),(45,40),(42,45),(10,46),(6,42)],c["fur"])
-        g.poly([(33,35),(36,28),(40,33),(45,31),(49,36),(50,41),(44,44),(36,42)],c["ink"])
-        g.poly([(35,36),(37,31),(40,35),(45,33),(47,37),(48,40),(43,42),(37,40)],c["fur"])
-        g.poly([(38,40),(43,41),(49,38),(48,42),(43,44)],c["cream"])
-        g.box(41,37,3,1,c["eye"])
-        g.poly([(6,39),(11,37),(17,40),(25,43),(39,43),(44,41),(43,46),(32,47),(12,47),(5,44)],c["ink"])
-        g.poly([(7,39),(12,39),(18,42),(26,44),(39,44),(42,43),(40,45),(32,46),(13,46),(7,43)],c["fur"])
-        g.poly([(33,44),(39,44),(42,43),(40,45),(34,46)],c["cream"])
-        return g.finish(direction)
-    wag=(-1,0,1,0)[phase] if happy else max(-2,min(2,tail_offset))
-    # Long, heavy brush trailing behind the hips, with a white terminal third.
-    g.poly([(23,30+bob),(18,32+bob),(12,33+wag),(6,32+wag),(1,35+wag),
-            (0,39+wag),(4,43+wag),(12,44+wag),(21,39+bob),(26,34+bob)],c["ink"])
-    g.poly([(22,31+bob),(18,33+bob),(12,34+wag),(6,33+wag),(2,36+wag),
-            (1,39+wag),(5,42+wag),(12,43+wag),(20,38+bob),(24,34+bob)],c["fur"])
-    g.poly([(1,38+wag),(3,35+wag),(7,33+wag),(10,35+wag),(8,37+wag),
-            (10,39+wag),(7,40+wag),(8,42+wag),(5,42+wag),(2,40+wag)],c["cream"])
-    g.line([(12,35+wag),(17,35+wag),(21,33+bob)],c["highlight"])
-    strides=(-4,-2,3,4,1,-3);lifts=(0,3,3,0,1,2)
-    if walking:
-        hind=(23+strides[phase],47-lifts[phase]);front=(43-strides[phase],47-lifts[(phase+3)%6])
-        hind_far=(27-strides[phase],47-lifts[(phase+3)%6]);front_far=(39+strides[phase],47-lifts[phase])
-    elif air:
-        hind,front,hind_far,front_far=(
-            ((20,42),(47,44),(29,45),(39,40)),((27,45),(40,39),(21,41),(49,45)),
-            ((31,42),(46,40),(24,45),(38,45)),((21,40),(40,45),(29,43),(49,40)))[phase]
-    else:hind,front,hind_far,front_far=(23,47),(43,47),(29,47),(39,47)
-    if pose=="groom":front=(47,34-phase%2)
-    _canine_leg(g,(27,31+bob),hind_far,c,True,True)
-    _canine_foreleg(g,(39,28+bob),front_far,c,True,True)
-    lower=33+min(3,max(0,stretch)) if air else 33+bob
-    g.poly([(20,26+bob),(25,23+bob),(34,23+bob),(41,26+bob),
-            (45,30+bob),(42,lower),(35,lower+1),(24,lower),(20,30+bob)],c["ink"])
-    g.poly([(22,26+bob),(26,24+bob),(34,24+bob),(40,27+bob),
-            (43,30+bob),(41,lower-1),(35,lower),(25,lower-1),(22,29+bob)],c["fur"])
-    g.line([(26,25+bob),(33,25+bob),(38,27+bob)],c["highlight"])
-    g.poly([(38,26+bob),(42,27+bob),(44,32+bob),(40,36+bob),(35,33+bob)],c["cream"])
-    if c["pattern"]=="calico":g.poly([(25,25+bob),(31,24+bob),(34,28+bob),(29,31+bob),(24,29+bob)],palette.marking)
-    if pose=="stretch":
-        g.poly([(22,27),(26,21),(31,24),(42,35),(43,38),(32,33),(23,31)],c["fur"])
-        hind=(23,47);front=(54,47)
-        _canine_leg(g,(25,31),hind,c,fox=True)
-        _canine_foreleg(g,(40,35),front,c,fox=True)
-    else:
-        _canine_leg(g,(25,31+bob),hind,c,fox=True)
-        _canine_foreleg(g,(42,29+bob),front,c,fox=True)
-    hy=bob+(6 if pose=="stretch" else 0)+(1 if happy and phase==2 else 0)
-    hx=(-1,0,0,-1)[phase] if happy else 0
-    if pose=="watch":hy+=max(-1,min(1,dangle))
-    g.p.save();g.p.translate(hx,hy)
-    # Small wedge-shaped skull and genuinely long, pointed rostrum.
-    g.poly([(39,24),(40,16),(43,10),(45,8),(48,15),(51,16),
-            (54,20),(59,23),(59,25),(55,28),(48,30),(42,28)],c["ink"])
-    g.poly([(41,23),(42,17),(44,12),(45,11),(47,17),(50,17),
-            (53,21),(58,23),(58,24),(54,27),(48,29),(43,27)],c["fur"])
-    g.poly([(48,16),(50,10),(52,10),(53,18)],c["ink"])
-    g.poly([(50,14),(51,12),(52,17)],c["shade"])
-    g.poly([(44,13),(45,12),(47,18),(44,17)],"#573729")
-    g.poly([(43,23),(47,25),(52,25),(58,23),(57,26),(53,28),(48,29),(44,27)],c["cream"])
-    _side_eye(g,50,19,c,closed=happy or pose in ("blink","yawn","groom"),vertical=dangle,wide=air)
-    g.box(57,23,3,2,c["nose"])
-    g.line([(51,27),(55,26)],c["ink"])
-    g.box(46,18,2,1,c["highlight"])
-    if pose=="yawn":
-        opening=(1,3,4,2)[phase];g.box(53,25,5,opening,c["ink"]);g.box(54,25+opening-1,3,1,c["pink"])
-    if happy and phase%2:g.box(55,27,2,2,c["pink"])
-    g.p.restore()
-    if pose=="groom":_canine_foreleg(g,(41,31),(47,34-phase%2),c,fox=True)
-    if happy:g.heart(12+phase,13-phase);g.heart(49,3+phase%2)
-    return g.finish(direction)
-
+             palette=None, stretch=0, target_size=None):
+    return _asset_pixmap("Fox",pose,frame,direction,tail_offset,breath,dangle,
+                         palette,stretch,True,target_size)
 
 _CROW_WINGS = (
     [(31,26),(25,18),(23,9),(19,1),(17,2),(18,8),(14,4),(12,5),(15,12),(10,8),(8,10),(16,22),(24,29)],
@@ -1343,7 +1336,7 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
 
 
 def draw_natural_peek(animal, palette=None) -> QPixmap:
-    """Small side-profile corner heads, with no feline ears or frontal eyes."""
+    """Keep each character's face while it peeks from the physical screen edge."""
     g=_NaturalGrid();c=_natural_colors(animal,palette)
     if animal=="Crow":
         g.poly([(43,16),(43,7),(47,1),(50,0),(54,1),(57,6),(56,10),
@@ -1354,16 +1347,16 @@ def draw_natural_peek(animal, palette=None) -> QPixmap:
         g.poly([(54,10),(59,12),(59,14),(54,13)],c["nose"])
         g.box(59,12,1,2,c["ink"])
     elif animal=="Dog":
-        g.poly([(43,5),(46,0),(52,0),(55,4),(55,9),(59,11),(59,16),(53,17),(49,20),(43,18),(40,11)],c["ink"])
-        g.poly([(44,6),(47,1),(52,1),(54,4),(54,10),(58,12),(58,15),(53,16),(49,18),(44,17),(42,11)],c["fur"])
-        g.poly([(42,5),(46,5),(47,12),(45,20),(42,20),(40,16)],c["shade"])
-        g.poly([(52,11),(57,11),(59,12),(59,16),(53,16),(51,14)],c["cream"])
-        g.box(58,11,2,3,c["nose"]);_side_eye(g,51,7,c)
+        g.p.save()
+        g.p.translate(0,-12)
+        _dog_head(g,c,"rest",0)
+        g.p.restore()
+        g.box(42,0,5,1,c["ink"])
+        g.box(59,14,1,3,c["nose"])
     else:
-        g.poly([(42,8),(44,0),(47,1),(49,7),(53,6),(55,9),(59,13),(59,15),(53,18),(46,20),(42,16)],c["ink"])
-        g.poly([(43,9),(45,2),(47,4),(48,9),(52,8),(54,10),(58,13),(58,14),(53,17),(46,18),(43,15)],c["fur"])
-        g.poly([(46,14),(50,15),(58,13),(57,16),(52,18),(47,18)],c["cream"])
-        _side_eye(g,51,10,c);g.box(58,13,2,2,c["nose"])
+        _fox_face(g,c,"rest",0,(30,0))
+        g.box(35,0,1,1,c["ink"])
+        g.box(59,17,1,2,c["nose"])
     return g.finish(1)
 
 
@@ -1403,27 +1396,301 @@ def draw_cat_habit(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
     return g.finish(direction)
 
 
-def draw_peek(animal, palette) -> QPixmap:
-    """Species-specific static corner faces; input stays transparent in the engine."""
-    if animal != "Cat":
-        return draw_natural_peek(animal, palette)
-    g,c=_PetGrid(palette),palette
-    if animal=="Cat" or animal=="Fox":
-        g.poly([(27,3),(28,0),(31,3),(35,3),(38,0),(39,1),(39,10),(37,12),(29,12),(27,10)],c.ink)
-        g.box(29,4,9,6,c.fur)
-        if animal=="Fox":g.poly([(28,9),(33,10),(39,8),(37,12),(30,12)],"#eee8db")
-    elif animal=="Dog":
-        g.poly([(28,2),(31,0),(36,0),(39,3),(39,11),(36,13),(29,12),(27,9)],c.ink)
-        g.box(29,3,9,8,c.fur);g.box(27,4,3,9,c.shade);g.box(34,9,5,3,c.muzzle)
-    else:
-        g.poly([(27,4),(31,1),(35,0),(39,3),(39,10),(36,13),(29,12),(26,9)],c.ink)
-        g.box(29,4,10,6,c.fur);g.box(37,8,3,2,"#e9ac59")
-    for x in (30,35):
-        g.box(x,6,2,2,c.neon);g.box(x,12,3,2,c.highlight)
-    if animal!="Crow":g.box(33,9,2,1,c.pink)
-    g.box(39,3,1,7,c.ink)
-    return g.finish(1)
+def draw_peek(animal, palette):
+    if animal in ("Cat","Dog","Fox"):
+        return _asset_peek(animal,palette)
+    return draw_natural_peek(animal,palette)
 
+
+# The supplied character sheets are the runtime art. Keep them at full detail;
+# the physics engine still uses the same logical-pixel window dimensions.
+SPRITE_CANVAS = (400, 320)
+_SPRITE_IMAGES = {}
+_SPRITE_BASES = {}
+_SPRITE_TINTS = {}
+
+
+def _sprite_sheet(filename):
+    if filename not in _SPRITE_IMAGES:
+        path = Path(__file__).resolve().parent / "artwork" / filename
+        image = QImage(str(path))
+        if image.isNull():
+            raise RuntimeError(f"Missing character artwork: {path}. Reinstall the complete app or source folder.")
+        _SPRITE_IMAGES[filename] = image
+    return _SPRITE_IMAGES[filename]
+
+
+def _sprite_cutout(filename, rectangle):
+    sheet = _sprite_sheet(filename)
+    if filename in ("fox-walk-sheet.png", "fox-expression-sheet.png"):
+        x,y,w,h = rectangle
+        left,right = max(0,x-24),min(sheet.width(),x+w+24)
+        rectangle = left,y,right-left,h
+    image = sheet.copy(*rectangle).convertToFormat(QImage.Format.Format_RGBA8888)
+    # The supplied Cat/Dog sheets have white backdrops. Treat only the connected
+    # outside backdrop as transparent; enclosed white fur, eyes and paws survive.
+    if filename in ("cat-character-sheet.png", "dog-character-sheet.png"):
+        width, height = image.width(), image.height()
+        raw = bytearray(image.constBits().asstring(image.sizeInBytes()))
+        stride = image.bytesPerLine()
+        from collections import deque
+        queue = deque()
+        seen = bytearray(width * height)
+        def offer(x, y):
+            pos = y * width + x
+            if seen[pos]:
+                return
+            seen[pos] = 1
+            i = y * stride + x * 4
+            red, green, blue = raw[i:i+3]
+            if min(red, green, blue) >= 238 and max(red, green, blue) - min(red, green, blue) <= 18:
+                raw[i+3] = 0
+                queue.append((x, y))
+        for x in range(width):
+            offer(x, 0)
+            offer(x, height-1)
+        for y in range(height):
+            offer(0, y)
+            offer(width-1, y)
+        while queue:
+            x, y = queue.popleft()
+            if x: offer(x-1, y)
+            if x+1 < width: offer(x+1, y)
+            if y: offer(x, y-1)
+            if y+1 < height: offer(x, y+1)
+        image = QImage(bytes(raw), width, height, stride, QImage.Format.Format_RGBA8888).copy()
+    if filename in ("fox-walk-sheet.png", "fox-expression-sheet.png"):
+        # Sheet spacing is not a perfect grid. Select the main connected fox,
+        # removing fragments of a neighbouring tail while retaining soft edges.
+        from collections import deque
+        width,height = image.width(),image.height()
+        raw = bytearray(image.constBits().asstring(image.sizeInBytes()))
+        alpha = raw[3::4]
+        seen = bytearray(width*height)
+        largest = []
+        for start in range(width*height):
+            if seen[start] or alpha[start] < 80:
+                continue
+            seen[start] = 1
+            queue,component = deque([start]),[]
+            while queue:
+                pos = queue.popleft()
+                component.append(pos)
+                x,y = pos%width,pos//width
+                neighbours = []
+                if x: neighbours.append(pos-1)
+                if x+1<width: neighbours.append(pos+1)
+                if y: neighbours.append(pos-width)
+                if y+1<height: neighbours.append(pos+width)
+                for other in neighbours:
+                    if not seen[other] and alpha[other] >= 80:
+                        seen[other] = 1
+                        queue.append(other)
+            if len(component)>len(largest):
+                largest = component
+        keep = bytearray(width*height)
+        for pos in largest:
+            x,y = pos%width,pos//width
+            for yy in range(max(0,y-1),min(height,y+2)):
+                for xx in range(max(0,x-1),min(width,x+2)):
+                    keep[yy*width+xx] = 1
+        for pos in range(width*height):
+            if not keep[pos]: raw[pos*4+3] = 0
+        image = QImage(bytes(raw),width,height,width*4,QImage.Format.Format_RGBA8888).copy()
+    bounds = QRegion(QPixmap.fromImage(image).mask()).boundingRect()
+    if bounds.isEmpty():
+        raise RuntimeError(f"Empty character frame in {filename}: {rectangle}")
+    return image.copy(bounds)
+
+
+def _sprite_cells(animal):
+    if animal == "Cat":
+        name = "cat-character-sheet.png"
+        cells = [(name,(left,top,right-left,bottom-top))
+                 for top,bottom,edges in ((0,330,(0,311,622,938,1264)),
+                    (330,590,(0,319,595,942,1264)),(590,843,(0,320,619,947,1264)))
+                 for left,right in zip(edges,edges[1:])]
+        return cells, dict(rest=[1], pet=[0], air=[2,3], sleep=[4], groom=[5], walk=[6,7,8,9,10,11])
+    if animal == "Dog":
+        name = "dog-character-sheet.png"
+        cells = [(name,(left,0,right-left,331)) for left,right in zip((0,319,611,895),(319,611,895,1200))]
+        cells += [(name,(column*400,331,400,262)) for column in range(3)]
+        cells += [(name,(left,593,right-left,303)) for left,right in zip((0,319,609,895),(319,609,895,1200))]
+        return cells, dict(rest=[0], pet=[1], air=[2,3], sleep=[4,5], groom=[6], walk=[7,8,9,10])
+    cells = [("fox-character-model.png",(0,0,1402,1122))]
+    for name in ("fox-expression-sheet.png","fox-walk-sheet.png"):
+        cells += [(name,(column*512,row*512,512,512)) for row in range(2) for column in range(3)]
+    return cells, dict(rest=[0], pet=[1,2], air=[3,4], sleep=[5], groom=[6], walk=[7,8,9,10,11,12])
+
+
+def _sprite_bases(animal):
+    if animal not in _SPRITE_BASES:
+        specifications, clips = _sprite_cells(animal)
+        cutouts = [_sprite_cutout(name, rect) for name, rect in specifications]
+        width, height = SPRITE_CANVAS
+        # Cat and Dog share their sheet's original scale across ALL poses, so a
+        # sleeping pet does not suddenly grow to fill the entire window.
+        common = cutouts[1:] if animal == "Fox" else cutouts
+        max_width = max(image.width() for image in common)
+        max_height = max(image.height() for image in common)
+        factor = min((width-18)/max_width, (height-6)/max_height)
+        bases = []
+        for index, cutout in enumerate(cutouts):
+            scale = min((width-18)/cutout.width(), (height-6)/cutout.height()) if animal == "Fox" and index == 0 else factor
+            sized = cutout.scaled(max(1,round(cutout.width()*scale)), max(1,round(cutout.height()*scale)),
+                                 Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            canvas = QImage(width,height,QImage.Format.Format_ARGB32)
+            canvas.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(canvas)
+            painter.drawImage((width-sized.width())//2,height-sized.height(),sized)
+            painter.end()
+            bases.append(canvas)
+        _SPRITE_BASES[animal] = bases, clips
+    return _SPRITE_BASES[animal]
+
+
+def _sprite_tinted(animal, index, palette):
+    bases, _ = _sprite_bases(animal)
+    if palette is None or palette.pattern == "natural":
+        return bases[index]
+    key = animal, index, palette
+    if key not in _SPRITE_TINTS:
+        import colorsys
+        image = bases[index].convertToFormat(QImage.Format.Format_RGBA8888)
+        raw = bytearray(image.constBits().asstring(image.sizeInBytes()))
+        target = QColor(palette.fur)
+        hue, saturation, value, _alpha = target.getHsvF()
+        hue = max(0.0,hue)
+        colors = {}
+        for i in range(0,len(raw),4):
+            if not raw[i+3]:
+                continue
+            red, green, blue = raw[i:i+3]
+            orange = red > green*1.08 and red > blue*1.35 and red > 95
+            dark_husky = animal == "Dog" and 35 < max(red,green,blue) < 155 and max(red,green,blue)-min(red,green,blue) < 48
+            if not (orange or dark_husky):
+                continue
+            color_key = red//8, green//8, blue//8
+            if color_key not in colors:
+                original_value = max(red,green,blue)/255
+                ratio = (0.55+original_value*0.55) if orange else (0.65+original_value*0.9)
+                if 0.91 <= ratio <= 1.05:
+                    rgb = target.red(),target.green(),target.blue()
+                else:
+                    rgb = tuple(round(v*255) for v in colorsys.hsv_to_rgb(hue,saturation,min(1,value*ratio)))
+                colors[color_key] = bytes(rgb)
+            raw[i:i+3] = colors[color_key]
+        tinted = QImage(bytes(raw),image.width(),image.height(),image.bytesPerLine(),QImage.Format.Format_RGBA8888).copy()
+        if len(_SPRITE_TINTS) >= 96:
+            _SPRITE_TINTS.pop(next(iter(_SPRITE_TINTS)))
+        _SPRITE_TINTS[key] = tinted
+    return _SPRITE_TINTS[key]
+
+
+def animal_frame_image(animal, pose, frame, direction=1, tail_offset=0, breath=0,
+                       dangle=0, palette=None, stretch=0, effects=True):
+    """Render original character artwork on a 400x320 transparent canvas."""
+    bases, clips = _sprite_bases(animal)
+    phase = frame % 4
+    clip = ("walk" if pose == "walk" else "air" if pose in ("held","fall","stretch")
+            else "pet" if pose in ("pet","petted","blink","yawn")
+            else "sleep" if pose == "sleep" else "groom" if pose == "groom" else "rest")
+    indices = clips[clip]
+    index = indices[frame % len(indices)]
+    source = _sprite_tinted(animal,index,palette)
+    width,height = SPRITE_CANVAS
+    image = QImage(width,height,QImage.Format.Format_ARGB32)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    sx, sy, angle, offset = 1.0, 1.0, 0.0, 0.0
+    if pose == "land":
+        sx,sy = ((1.035,0.92),(0.985,1.012),(1.0,1.0))[frame%3]
+    elif pose in ("held","fall"):
+        sy = 1 + min(3,max(0,stretch))*0.012
+        sx = 1 - min(3,max(0,stretch))*0.005
+        angle = (-1.0,0.0,1.0,0.0)[phase]
+        offset = (-3,0,-1,2)[phase]
+    elif pose in ("pet","petted"):
+        angle = (-0.4,0.0,0.4,0.0)[phase]
+        sy = (1.0,0.997,1.0,1.003)[phase]
+    elif pose in ("groom","yawn","stretch","watch"):
+        angle = (-0.5,0.0,0.5,0.0)[phase] + (dangle*0.4 if pose == "watch" else 0)
+        sy = 0.995 if phase%2 else 1.0
+    elif pose == "sleep":
+        sy = 1.0 if frame%2 == 0 else 0.994
+    else:
+        sy = 1 + max(-1,min(1,breath))*0.004
+    painter.translate(width/2,height-1+offset)
+    painter.rotate(angle)
+    painter.scale(sx,sy)
+    painter.translate(-width/2,-(height-1))
+    if tail_offset and pose in ("rest","watch"):
+        # Subtle tail motion samples original pixels; the face is never redrawn.
+        split = int(width*0.43)
+        for y in range(0,height,4):
+            shift = tail_offset * (1-y/height)
+            painter.drawImage(QRectF(shift,y,split,4),source,QRectF(0,y,split,4))
+        painter.drawImage(QRectF(split,0,width-split,height),source,QRectF(split,0,width-split,height))
+    else:
+        painter.drawImage(0,0,source)
+    painter.resetTransform()
+    if effects and pose in ("pet","petted"):
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#d77c9d"))
+        for hx,hy in ((45+phase*3,35-phase*3),(350,55+phase*2)):
+            painter.drawPolygon(QPolygon([QPoint(hx,hy+4),QPoint(hx+4,hy),
+                QPoint(hx+8,hy+4),QPoint(hx+12,hy),QPoint(hx+16,hy+4),
+                QPoint(hx+16,hy+9),QPoint(hx+8,hy+17),QPoint(hx,hy+9)]))
+    painter.end()
+    if pose not in ("held","fall","stretch"):
+        # Keep real paw pixels on the floor despite transparent source padding.
+        visible = QRegion(QPixmap.fromImage(image).mask()).boundingRect()
+        if not visible.isEmpty() and visible.bottom() < height-1:
+            anchored = QImage(width,height,QImage.Format.Format_ARGB32)
+            anchored.fill(Qt.GlobalColor.transparent)
+            anchor_painter = QPainter(anchored)
+            anchor_painter.drawImage(0,height-1-visible.bottom(),image)
+            anchor_painter.end()
+            image = anchored
+    if direction < 0:
+        image = image.transformed(QTransform().scale(-1,1))
+    return image
+
+
+def fox_frame_image(pose, frame, direction=1, tail_offset=0, breath=0, dangle=0,
+                    palette=None, stretch=0):
+    return animal_frame_image("Fox",pose,frame,direction,tail_offset,breath,dangle,palette,stretch)
+
+
+def _asset_pixmap(animal, pose, frame, direction=1, tail_offset=0, breath=0,
+                  dangle=0, palette=None, stretch=0, effects=True, target_size=None):
+    image = animal_frame_image(animal,pose,frame,1,tail_offset,breath,dangle,palette,stretch,effects)
+    width,height = target_size or (WIDTH,HEIGHT)
+    image = image.scaled(int(width),int(height),Qt.AspectRatioMode.IgnoreAspectRatio,
+                         Qt.TransformationMode.SmoothTransformation)
+    if direction < 0:
+        image = image.transformed(QTransform().scale(-1,1))
+    return QPixmap.fromImage(image)
+
+
+def _asset_peek(animal,palette):
+    bases,clips = _sprite_bases(animal)
+    image = _sprite_tinted(animal,clips["rest"][0],palette)
+    bounds = QRegion(QPixmap.fromImage(image).mask()).boundingRect()
+    crop = image.copy(round(bounds.x()+bounds.width()*0.43),bounds.y(),
+                      round(bounds.width()*0.57),round(bounds.height()*0.57))
+    crop_bounds = QRegion(QPixmap.fromImage(crop).mask()).boundingRect()
+    crop = crop.copy(crop_bounds).scaled(54,48,Qt.AspectRatioMode.KeepAspectRatio,
+                                       Qt.TransformationMode.SmoothTransformation)
+    visible = QRegion(QPixmap.fromImage(crop).mask()).boundingRect()
+    crop = crop.copy(visible)
+    result = QImage(WIDTH,HEIGHT,QImage.Format.Format_ARGB32)
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    painter.drawImage(WIDTH-crop.width(),0,crop)
+    painter.end()
+    return QPixmap.fromImage(result)
 
 ANIMAL_QUOTES = {
     "Cat": CAT_QUOTES,
@@ -1581,7 +1848,7 @@ class DesktopCat(QWidget):
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.rng = random.Random()
         self.motion = Motion()
-        self.palette_name = "Charcoal Grey"
+        self.palette_name = "Natural Coat"
         self.palette = PALETTES[self.palette_name]
         self.animal_type = "Cat"
         self.size_name, self.pixel_scale = "Medium", SIZES["Medium"]
@@ -1669,7 +1936,7 @@ class DesktopCat(QWidget):
                 return result
             return str(result).lower() in ("true", "1") if str(result).lower() in ("true", "false", "1", "0") else default
 
-        palette_name = str(value("appearance/palette", "Charcoal Grey"))
+        palette_name = str(value("appearance/palette", "Natural Coat"))
         if palette_name in PALETTES:
             self.palette, self.palette_name = PALETTES[palette_name], palette_name
         elif palette_name == "Custom RGB":
@@ -1680,7 +1947,7 @@ class DesktopCat(QWidget):
         legacy_bird = animal == "Bird"
         if legacy_bird:
             animal = "Crow"
-        if legacy_bird and self.palette_name == "Charcoal Grey":
+        if (legacy_bird or str(value("appearance/model_revision", "1")) == "1") and self.palette_name == "Charcoal Grey":
             self.palette_name, self.palette = "Natural Coat", PALETTES["Natural Coat"]
         self.animal_type = animal if animal in DRAWERS else "Cat"
         size = str(value("appearance/size", "Medium"))
@@ -1722,6 +1989,7 @@ class DesktopCat(QWidget):
         palette, name = self._color_restore or (self.palette, self.palette_name)
         values = {
             "appearance/palette": name, "appearance/custom_rgb": palette.fur,
+            "appearance/model_revision": 2,
             "appearance/animal": self.animal_type, "appearance/size": self.size_name,
             "behavior/roaming": self.motion.roaming, "behavior/paused": self._paused,
             "behavior/habits": self._habits_enabled, "behavior/watch_cursor": self._cursor_interaction,
@@ -1946,16 +2214,21 @@ class DesktopCat(QWidget):
             pose = "sleep" if self.motion.sleeping else "blink" if self._blink_left > 0 else "rest"
             frame = int(phase > 0.3) if pose == "sleep" else 0
         elif state == "walk":
-            count, seconds = ((6, 0.09) if self.animal_type in ("Dog", "Fox") else
-                              (4, 0.13) if self.animal_type == "Crow" else (2, 0.18))
+            count, seconds = ((4, 0.09) if self.animal_type == "Dog" else
+                              (6, 0.09) if self.animal_type in ("Cat", "Fox") else (4, 0.13))
             frame = int(self._animation_time / seconds) % count
             breath = 0
         direction = 1 if pose == "peek" or (pose == PETTED and self.animal_type == "Cat") else self.motion.direction
         key = pose, frame, direction, tail_offset, breath, dangle, self.animal_type, self.palette, stretch
         if key != self._frame_key:
             if key not in self._frames:
-                pixmap = (draw_peek(self.animal_type, self.palette) if pose == "peek" else
-                          DRAWERS[self.animal_type](*key[:6], palette=self.palette, stretch=stretch))
+                if pose == "peek":
+                    pixmap = draw_peek(self.animal_type, self.palette)
+                elif self.animal_type in ("Cat", "Dog", "Fox"):
+                    pixmap = DRAWERS[self.animal_type](*key[:6], palette=self.palette,
+                        stretch=stretch, target_size=(self.width(),self.height()))
+                else:
+                    pixmap = DRAWERS[self.animal_type](*key[:6], palette=self.palette, stretch=stretch)
                 if pixmap.size() != self.size():
                     pixmap = pixmap.scaled(self.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
                                            Qt.TransformationMode.FastTransformation)
