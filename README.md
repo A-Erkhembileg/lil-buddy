@@ -53,9 +53,11 @@ Right-click the pet, or use its menu-bar/tray icon:
 - **Animal Type:** Cat, Dog, Fox, or Crow, each with its own animations and quotes.
   Natural Coat preserves the supplied tabby's orange stripes and green eyes,
   the husky's charcoal-and-white coat and blue eyes, and the fox's orange/gold
-  fur, purple eyes, cream bib, and full curved tail. Cat and Fox have six walking
-  frames; Dog uses the four supplied walking frames. All three sit at rest and
-  use their supplied petting, airborne, sleeping, and grooming poses.
+  fur, purple eyes, cream bib, and full curved tail. Each has sixteen drawn
+  walking poses, four idle poses, six petting poses, and six airborne poses.
+  Continuous secondary movement uses the 16 ms animation clock between pose
+  changes. Registered body anchors keep swinging tails from shifting the whole
+  sprite, and dragging-to-falling retains the same airborne animation phase.
 - **Take flight:** available for Crow. Eight wing phases accompany momentum,
   flap-driven lift, air drag, gentle steering, and a controlled descent. A crow
   can also take short spontaneous flights during idle habits. Releasing it
@@ -148,20 +150,31 @@ show their supplied character poses and walking cycles.
 
 Each detailed animal has its own transparent 400 by 320 frame atlas and JSON clip
 definitions. Crow retains its 60 by 48 pixel grid. `animal-sprites-atlas.json`
-indexes all four animal atlases. Preview motion in
+indexes all four exported animal atlases. The registered runtime assets live in
+`artwork/motion/`; the new authored pose sheets and generation prompts are in
+`artwork/motion-sources/`. The desktop renderer updates on its 16 ms timer;
+compact GIF previews are sampled at 25 fps. Preview motion in
 [cat-animations.gif](artwork/cat-animations.gif),
 [dog-animations.gif](artwork/dog-animations.gif), and
 [fox-animations.gif](artwork/fox-animations.gif).
+
+[Watch the full 60 fps motion preview](artwork/fluid-motion-60fps.mp4).
 
 The [fox character model](artwork/fox-character-model.png) was created with image
 generation from the supplied visual reference. Its original pixels and detailed
 pose sheets are the runtime artwork, alongside the supplied Cat and Dog sheets.
 The [generation prompt](artwork/fox-character-model-prompt.md) is included.
-Previews and atlases are exports of the actual app renderer. Regenerate them with:
+Previews and atlases are exports of the actual app renderer. Bake the registered
+runtime atlases from the authored sheets, then regenerate the previews with:
 
 ```sh
+./.venv/bin/python -B tools/bake_motion_atlases.py
 ./.venv/bin/python -B tools/export_sprite_sheet.py
 ```
+
+The optional `tools/render_motion_video.py` exports a 60 fps MP4 using FFmpeg
+(`--ffmpeg /path/to/ffmpeg`, or an installed `imageio-ffmpeg`). This encoder is
+only for creating previews; the app does not include or require it.
 
 ## Build native apps
 

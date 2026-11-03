@@ -85,18 +85,21 @@ class ExpressiveWidgetTests(unittest.TestCase):
         self.assertEqual(self.cat.motion.state, "rest")
         self.assertFalse(self.cat.bubble.isVisible())
 
-    def test_four_paddling_frames_run_during_both_dragging_and_falling(self):
+    def test_six_paddling_frames_run_during_both_dragging_and_falling(self):
         for state in ("held", "fall"):
             images = []
             self.cat.motion.state, self.cat.motion.vy = state, 500
-            for frame in range(4):
+            self.cat._animation_time = 10.0
+            self.cat._pose_clock_kind = None
+            self.cat._set_frame()
+            for frame in range(6):
                 with self.subTest(state=state, frame=frame):
-                    self.cat._animation_time = frame * pet.AIR_FRAME_SECONDS + 0.001
+                    self.cat._animation_time = 10.0 + frame * 0.05 + 0.001
                     self.cat._set_frame()
                     self.assertEqual(self.cat._frame_key[:2], (state, frame))
                     images.append(self.cat._pixmap.toImage())
-            for first in range(4):
-                for second in range(first + 1, 4):
+            for first in range(6):
+                for second in range(first + 1, 6):
                     self.assertNotEqual(images[first], images[second])
 
     def test_fall_speed_and_drag_speed_control_stretch_separately(self):

@@ -62,6 +62,9 @@ def bitmap_text(image: Image.Image, text: str, position: tuple[int, int],
 
 def render_frame(animal, pose, frame, **motion):
     if animal in ("Cat","Dog","Fox"):
+        if "motion_phase" not in motion and pose in ("walk","held","fall","petted"):
+            count = 16 if pose == "walk" else 6
+            motion["motion_phase"] = (frame % count) / count
         image = pet.animal_frame_image(animal,pose,frame,
                                        palette=pet.PALETTES["Natural Coat"],**motion)
     else:
@@ -76,12 +79,10 @@ def render_frame(animal, pose, frame, **motion):
 def specifications():
     rows = [("Crow",[("rest",0,"PERCH",600)]+[("fly",i,f"FLIGHT {i+1:02}",55) for i in range(8)])]
     for animal in ("Cat","Dog","Fox"):
-        count = 4 if animal == "Dog" else 6
         frames = [("rest",0,"REST",600)]
-        frames += [("walk",i,f"WALK {i+1:02}",90) for i in range(count)]
+        frames += [("walk",i,f"WALK {i+1:02}",40) for i in (0,4,8,12)]
         frames += [("petted",0,"PETTED",90),("sleep",0,"SLEEP",800)]
-        if animal == "Dog":
-            frames += [("groom",0,"GROOM",180),("watch",0,"WATCH",180)]
+        frames += [("groom",0,"GROOM",180),("watch",0,"WATCH",180)]
         rows.append((animal,frames))
     return rows
 
@@ -89,8 +90,8 @@ def specifications():
 def animation_specifications():
     rows = specifications()[:1]
     for animal in ("Cat","Dog","Fox"):
-        poses = (("rest",1,600),("blink",1,140),("walk",4 if animal=="Dog" else 6,90),
-                 ("sleep",2,800),("held",4,65),("fall",4,65),("petted",4,90),
+        poses = (("rest",1,600),("blink",1,140),("walk",16,40),
+                 ("sleep",2,800),("held",6,50),("fall",6,50),("petted",6,80),
                  ("land",3,60),("groom",4,180),("yawn",4,180),("stretch",4,180),("watch",4,180))
         rows.append((animal,[(pose,i,pose.upper(),duration) for pose,count,duration in poses
                              for i in range(count)]))
@@ -98,28 +99,34 @@ def animation_specifications():
 
 
 def export_animal_preview(output,animal):
+    # Compact GIF previews sample the continuous clocks at25fps. The companion
+    # MP4 preview and the desktop renderer show the full60Hz motion.
     sequence = []
-    for i in range(12):
-        phase = math.sin(i*math.tau/12)
-        sequence.append(("rest",0,"IDLE",150,dict(tail_offset=round(phase*2),breath=-int(phase>0.4))))
-    count = 4 if animal=="Dog" else 6
-    sequence += [("walk",i,"WALK",90,{}) for _ in range(2) for i in range(count)]
-    sequence += [("petted",i,"PETTED",90,{}) for _ in range(2) for i in range(4)]
-    sequence += [("fall",i,"AIRBORNE",65,dict(stretch=(1,2,3,2)[i])) for i in range(4)]
-    sequence += [("land",i,"LANDING",60,{}) for i in range(3)]
-    sequence += [("sleep",i,"SLEEP",650,{}) for i in range(2)]
-    native = render_frame(animal,"rest",0).size
+    segments = (("rest","IDLE",2.4,2.4,4),("walk","WALK",1.28,.64,16),
+                ("petted","PETTED",.96,.48,6),("fall","AIRBORNE",.60,.30,6),
+                ("land","LANDING",.18,.18,3),("sleep","SLEEP",.60,3.6,2))
+    for pose,label,seconds,cycle,count in segments:
+        for tick in range(round(seconds*25)):
+            elapsed = tick/25
+            phase = (elapsed/cycle)%1.0
+            frame = min(count-1,int(phase*count))
+            motion = {"motion_phase":phase}
+            if pose == "fall": motion["stretch"] = 2
+            if pose == "land": motion["motion_phase"] = None
+            sequence.append((pose,frame,label,40,motion))
+    native = (240,192)
     images,durations = [],[]
     for pose,i,label,duration,motion in sequence:
         canvas = Image.new("RGB",(native[0]+64,native[1]+72),"#faf2e7")
         bitmap_text(canvas,f"{animal.upper()} - {label}",(24,14),2,"#70533f")
         sprite = render_frame(animal,pose,i,**motion)
+        sprite = sprite.resize(native,Image.Resampling.LANCZOS)
         canvas.paste(sprite,(32,48),sprite)
         images.append(canvas)
         durations.append(duration)
     path = output/f"{animal.lower()}-animations.gif"
     images[0].save(path,save_all=True,append_images=images[1:],duration=durations,
-                   loop=0,disposal=2,optimize=False)
+                   loop=0,disposal=2,optimize=True)
     return path
 
 

@@ -861,9 +861,10 @@ def _draw_cat_expression(pose: str, frame: int, direction: int, palette: Palette
 
 
 def draw_cat(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
-             palette=PALETTES["Natural Coat"], stretch=0, effects=True, target_size=None):
+             palette=PALETTES["Natural Coat"], stretch=0, effects=True, target_size=None,
+             motion_phase=None):
     return _asset_pixmap("Cat",pose,frame,direction,tail_offset,breath,dangle,
-                         palette,stretch,effects,target_size)
+                         palette,stretch,effects,target_size,motion_phase)
 
 class _PetGrid:
     """Pixel primitives shared by the species; all motion remains in the engine."""
@@ -1091,9 +1092,9 @@ def _dog_head(g, colors, pose, phase, dangle=0):
 
 
 def draw_dog(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
-             palette=None, stretch=0, target_size=None):
+             palette=None, stretch=0, target_size=None, motion_phase=None):
     return _asset_pixmap("Dog",pose,frame,direction,tail_offset,breath,dangle,
-                         palette,stretch,True,target_size)
+                         palette,stretch,True,target_size,motion_phase)
 
 def _fox_brush(g, c, pose, wag=0):
     """A plush brush with a broad cream tip and a clear curved silhouette."""
@@ -1215,9 +1216,9 @@ def _fox_paw(g, c, root, foot, far=False, hind=False):
 
 
 def draw_fox(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
-             palette=None, stretch=0, target_size=None):
+             palette=None, stretch=0, target_size=None, motion_phase=None):
     return _asset_pixmap("Fox",pose,frame,direction,tail_offset,breath,dangle,
-                         palette,stretch,True,target_size)
+                         palette,stretch,True,target_size,motion_phase)
 
 _CROW_WINGS = (
     [(31,26),(25,18),(23,9),(19,1),(17,2),(18,8),(14,4),(12,5),(15,12),(10,8),(8,10),(16,22),(24,29)],
@@ -1523,7 +1524,7 @@ def _sprite_cells(animal):
     return cells, dict(rest=[0], pet=[1,2], air=[3,4], sleep=[5], groom=[6], walk=[7,8,9,10,11,12])
 
 
-def _sprite_bases(animal):
+def _legacy_sprite_bases(animal):
     if animal not in _SPRITE_BASES:
         specifications, clips = _sprite_cells(animal)
         cutouts = [_sprite_cutout(name, rect) for name, rect in specifications]
@@ -1547,6 +1548,57 @@ def _sprite_bases(animal):
             bases.append(canvas)
         _SPRITE_BASES[animal] = bases, clips
     return _SPRITE_BASES[animal]
+
+
+_MOTION_BASES = {}
+ASSET_ANIMATION_SECONDS = {
+    "idle": 2.4, "walk": 0.64, "pet": 0.48, "air": 0.30,
+    "sleep": 3.6, "groom": 1.2, "yawn": 1.2, "stretch": 1.2, "watch": 2.4,
+}
+
+
+def _sprite_bases(animal):
+    """Load prepared frame canvases once, retaining the artist's frame anchors."""
+    if animal in _MOTION_BASES:
+        return _MOTION_BASES[animal]
+    directory = Path(__file__).resolve().parent / "artwork" / "motion"
+    manifest_path = directory / (animal.lower() + ".json")
+    if not manifest_path.is_file():
+        # Kept for the offline atlas baker and older source checkouts. Packaged
+        # releases include the baked atlases, so normal playback does no cutouts.
+        return _legacy_sprite_bases(animal)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    filename = manifest.get("image")
+    if (manifest.get("format_version") != 1 or not isinstance(filename, str)
+            or Path(filename).name != filename
+            or manifest.get("cell_size") != list(SPRITE_CANVAS)):
+        raise RuntimeError(f"Invalid motion atlas manifest: {manifest_path}")
+    atlas = QImage(str(directory / filename))
+    if atlas.isNull():
+        raise RuntimeError(f"Missing motion artwork: {directory / filename}. Reinstall the complete app.")
+    atlas = atlas.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+    frames = []
+    for entry in manifest.get("frames", []):
+        rectangle = entry.get("rect") if isinstance(entry, dict) else entry
+        if (not isinstance(rectangle, list) or len(rectangle) != 4
+                or any(not isinstance(value, int) for value in rectangle)):
+            raise RuntimeError(f"Invalid frame coordinates in {manifest_path}")
+        x, y, width, height = rectangle
+        if (width, height) != SPRITE_CANVAS or min(x, y) < 0 or x+width > atlas.width() or y+height > atlas.height():
+            raise RuntimeError(f"Out-of-bounds frame in {manifest_path}: {rectangle}")
+        frames.append(atlas.copy(x, y, width, height))
+    clips = manifest.get("clips", {})
+    for clip in ("rest", "walk", "pet", "air", "sleep", "groom"):
+        indices = clips.get(clip)
+        if (not isinstance(indices, list) or not indices
+                or any(not isinstance(index, int) or not 0 <= index < len(frames) for index in indices)):
+            raise RuntimeError(f"Invalid {clip} clip in {manifest_path}")
+    for name, indices in clips.items():
+        if (not isinstance(name, str) or not isinstance(indices, list) or not indices
+                or any(not isinstance(index, int) or not 0 <= index < len(frames) for index in indices)):
+            raise RuntimeError(f"Invalid motion clip in {manifest_path}")
+    _MOTION_BASES[animal] = frames, clips
+    return _MOTION_BASES[animal]
 
 
 def _sprite_tinted(animal, index, palette):
@@ -1588,35 +1640,83 @@ def _sprite_tinted(animal, index, palette):
 
 
 def animal_frame_image(animal, pose, frame, direction=1, tail_offset=0, breath=0,
-                       dangle=0, palette=None, stretch=0, effects=True):
-    """Render original character artwork on a 400x320 transparent canvas."""
+                       dangle=0, palette=None, stretch=0, effects=True, motion_phase=None):
+    """Paint a single original-art frame, with optional continuous secondary motion."""
     bases, clips = _sprite_bases(animal)
-    phase = frame % 4
-    clip = ("walk" if pose == "walk" else "air" if pose in ("held","fall","stretch")
-            else "pet" if pose in ("pet","petted","blink","yawn")
-            else "sleep" if pose == "sleep" else "groom" if pose == "groom" else "rest")
+    baked = animal in _MOTION_BASES
+    discrete_phase = frame % 4
+    if pose == "walk":
+        clip = "walk"
+    elif pose in ("held", "fall", "stretch"):
+        clip = "air"
+    elif pose == "blink":
+        clip = "blink" if "blink" in clips else "pet"
+    elif pose in ("pet", "petted", "yawn"):
+        clip = "pet"
+    elif pose == "sleep":
+        clip = "sleep"
+    elif pose == "groom":
+        clip = "groom"
+    elif motion_phase is not None and pose in ("rest", "watch") and "idle" in clips:
+        clip = "idle"
+    else:
+        clip = "rest"
     indices = clips[clip]
     index = indices[frame % len(indices)]
     source = _sprite_tinted(animal,index,palette)
     width,height = SPRITE_CANVAS
-    image = QImage(width,height,QImage.Format.Format_ARGB32)
+    image = QImage(width,height,QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
     sx, sy, angle, offset = 1.0, 1.0, 0.0, 0.0
-    if pose == "land":
+    tail_sway = 0.0
+    continuous = motion_phase is not None
+    if continuous:
+        normalized = float(motion_phase) % 1.0
+        theta = normalized * math.tau
+        wave, twice = math.sin(theta), math.sin(theta*2)
+        if pose == "land":
+            sx,sy = ((1.035,0.92),(0.985,1.012),(1.0,1.0))[frame%3]
+        elif pose in ("held","fall"):
+            # The six drawn frames provide the paddling. This small continuous
+            # spring response follows the same clock when held becomes falling.
+            # Leave room for the ear and paw extremities already present in
+            # the atlas. Relative elongation stays within the fixed canvas.
+            sy = 0.97 + min(3,max(0,stretch))*0.0095 + twice*0.001
+            sx = 1 - min(3,max(0,stretch))*0.005
+            angle, offset = wave*0.45, -2.3-math.cos(theta)*0.6
+        elif pose in ("pet","petted"):
+            sy, angle, tail_sway = 1+twice*0.003, wave*0.18, twice*2.2
+        elif pose == "walk":
+            # Preserve the weight shifts and planted paws already drawn into the
+            # sixteen gait frames; do not normalize their bounds on playback.
+            sy, angle = 1+twice*0.001, wave*0.035
+        elif pose == "sleep":
+            sy = 1+wave*0.003
+        elif pose in ("groom","yawn","stretch","watch"):
+            sy, angle = 1+wave*0.002, wave*0.18
+            if pose == "watch":
+                angle += max(-1,min(1,dangle))*0.15
+                tail_sway = math.sin(theta+0.6)*1.0
+        else:
+            # A quiet chest breath, head lean and independent tail drift use
+            # original artwork pixels; no face or limbs are redrawn.
+            sy, angle = 1+wave*0.0035, twice*0.08
+            tail_sway = math.sin(theta+0.6)*1.5
+    elif pose == "land":
         sx,sy = ((1.035,0.92),(0.985,1.012),(1.0,1.0))[frame%3]
     elif pose in ("held","fall"):
         sy = 1 + min(3,max(0,stretch))*0.012
         sx = 1 - min(3,max(0,stretch))*0.005
-        angle = (-1.0,0.0,1.0,0.0)[phase]
-        offset = (-3,0,-1,2)[phase]
+        angle = (-1.0,0.0,1.0,0.0)[discrete_phase]
+        offset = (-3,0,-1,2)[discrete_phase]
     elif pose in ("pet","petted"):
-        angle = (-0.4,0.0,0.4,0.0)[phase]
-        sy = (1.0,0.997,1.0,1.003)[phase]
+        angle = (-0.4,0.0,0.4,0.0)[discrete_phase]
+        sy = (1.0,0.997,1.0,1.003)[discrete_phase]
     elif pose in ("groom","yawn","stretch","watch"):
-        angle = (-0.5,0.0,0.5,0.0)[phase] + (dangle*0.4 if pose == "watch" else 0)
-        sy = 0.995 if phase%2 else 1.0
+        angle = (-0.5,0.0,0.5,0.0)[discrete_phase] + (dangle*0.4 if pose == "watch" else 0)
+        sy = 0.995 if discrete_phase%2 else 1.0
     elif pose == "sleep":
         sy = 1.0 if frame%2 == 0 else 0.994
     else:
@@ -1625,12 +1725,15 @@ def animal_frame_image(animal, pose, frame, direction=1, tail_offset=0, breath=0
     painter.rotate(angle)
     painter.scale(sx,sy)
     painter.translate(-width/2,-(height-1))
-    if tail_offset and pose in ("rest","watch"):
-        # Subtle tail motion samples original pixels; the face is never redrawn.
+    if not continuous and tail_offset and pose in ("rest","watch"):
+        tail_sway = float(tail_offset)
+    if tail_sway and pose in ("rest","watch","pet","petted"):
         split = int(width*0.43)
-        for y in range(0,height,4):
-            shift = tail_offset * (1-y/height)
-            painter.drawImage(QRectF(shift,y,split,4),source,QRectF(0,y,split,4))
+        # Short textured ribbons bend the brush without translucent crossfades.
+        # The body overlaps the seam by one pixel, avoiding a transparent crack.
+        for y in range(0,height,8):
+            shift = tail_sway * (1-y/height)**1.5
+            painter.drawImage(QRectF(shift,y,split+1,8),source,QRectF(0,y,split+1,8))
         painter.drawImage(QRectF(split,0,width-split,height),source,QRectF(split,0,width-split,height))
     else:
         painter.drawImage(0,0,source)
@@ -1638,13 +1741,20 @@ def animal_frame_image(animal, pose, frame, direction=1, tail_offset=0, breath=0
     if effects and pose in ("pet","petted"):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor("#d77c9d"))
-        for hx,hy in ((45+phase*3,35-phase*3),(350,55+phase*2)):
+        if continuous:
+            drift = math.sin(normalized*math.tau)
+            hearts = ((45+drift*4,34-drift*5),(350-drift*3,54+drift*4))
+        else:
+            hearts = ((45+discrete_phase*3,35-discrete_phase*3),(350,55+discrete_phase*2))
+        for hx,hy in hearts:
+            hx,hy = round(hx),round(hy)
             painter.drawPolygon(QPolygon([QPoint(hx,hy+4),QPoint(hx+4,hy),
                 QPoint(hx+8,hy+4),QPoint(hx+12,hy),QPoint(hx+16,hy+4),
                 QPoint(hx+16,hy+9),QPoint(hx+8,hy+17),QPoint(hx,hy+9)]))
     painter.end()
-    if pose not in ("held","fall","stretch"):
-        # Keep real paw pixels on the floor despite transparent source padding.
+    if not baked and pose not in ("held","fall","stretch"):
+        # Legacy source sheets need this one-time-style correction. Baked
+        # atlases already contain their fixed canvas and paw anchors.
         visible = QRegion(QPixmap.fromImage(image).mask()).boundingRect()
         if not visible.isEmpty() and visible.bottom() < height-1:
             anchored = QImage(width,height,QImage.Format.Format_ARGB32)
@@ -1657,15 +1767,16 @@ def animal_frame_image(animal, pose, frame, direction=1, tail_offset=0, breath=0
         image = image.transformed(QTransform().scale(-1,1))
     return image
 
-
 def fox_frame_image(pose, frame, direction=1, tail_offset=0, breath=0, dangle=0,
-                    palette=None, stretch=0):
-    return animal_frame_image("Fox",pose,frame,direction,tail_offset,breath,dangle,palette,stretch)
+                    palette=None, stretch=0, motion_phase=None):
+    return animal_frame_image("Fox",pose,frame,direction,tail_offset,breath,dangle,palette,stretch,
+                              motion_phase=motion_phase)
 
 
 def _asset_pixmap(animal, pose, frame, direction=1, tail_offset=0, breath=0,
-                  dangle=0, palette=None, stretch=0, effects=True, target_size=None):
-    image = animal_frame_image(animal,pose,frame,1,tail_offset,breath,dangle,palette,stretch,effects)
+                  dangle=0, palette=None, stretch=0, effects=True, target_size=None,
+                  motion_phase=None):
+    image = animal_frame_image(animal,pose,frame,1,tail_offset,breath,dangle,palette,stretch,effects,motion_phase)
     width,height = target_size or (WIDTH,HEIGHT)
     image = image.scaled(int(width),int(height),Qt.AspectRatioMode.IgnoreAspectRatio,
                          Qt.TransformationMode.SmoothTransformation)
@@ -1892,6 +2003,8 @@ class DesktopCat(QWidget):
         self._menu_open = False
         self._last_time = time.monotonic()
         self._animation_time = 0.0
+        self._pose_clock_kind = None
+        self._pose_clock_started = 0.0
         self._blink_in = self.rng.uniform(2.0, 5.0)
         self._blink_left = 0.0
         self._frames: dict[tuple, tuple[QPixmap, QRegion]] = {}
@@ -2180,9 +2293,9 @@ class DesktopCat(QWidget):
     def _set_frame(self) -> None:
         state = self.motion.state
         pose, frame = state, 0
-        phase = math.sin(self._animation_time * math.tau / 3.6)
-        tail_offset = round(2 * phase)
-        breath = -1 if phase > 0.4 else 0
+        idle_wave = math.sin(self._animation_time * math.tau / 3.6)
+        tail_offset = round(2 * idle_wave)
+        breath = -1 if idle_wave > 0.4 else 0
         dangle, stretch = 0, 0
         if self._latched:
             pose, frame, tail_offset, breath, dangle = "peek", 0, 0, 0, 0
@@ -2212,42 +2325,72 @@ class DesktopCat(QWidget):
                 dangle = -1 if cursor.y() < center.y() - 12 else 1 if cursor.y() > center.y() + 12 else 0
         elif state == "rest":
             pose = "sleep" if self.motion.sleeping else "blink" if self._blink_left > 0 else "rest"
-            frame = int(phase > 0.3) if pose == "sleep" else 0
+            frame = int(idle_wave > 0.3) if pose == "sleep" else 0
         elif state == "walk":
             count, seconds = ((4, 0.09) if self.animal_type == "Dog" else
                               (6, 0.09) if self.animal_type in ("Cat", "Fox") else (4, 0.13))
             frame = int(self._animation_time / seconds) % count
             breath = 0
+
+        animated_art = self.animal_type in ("Cat", "Dog", "Fox")
+        motion_phase = None
+        if animated_art:
+            group = ("air" if pose in ("held", "fall") else
+                     "idle" if pose in ("rest", "blink") else
+                     "pet" if pose in ("pet", "petted") else pose)
+            kind = self.animal_type, group
+            if kind != self._pose_clock_kind:
+                self._pose_clock_kind = kind
+                self._pose_clock_started = self._animation_time
+            elapsed = max(0.0, self._animation_time-self._pose_clock_started)
+            if pose not in ("peek", "land"):
+                duration = ASSET_ANIMATION_SECONDS.get(group, 1.2)
+                # Only normalized, bounded phase values enter the frame cache.
+                # Milliperiod precision permits subpixel motion on every 16ms tick.
+                motion_phase = (round((elapsed/duration % 1.0)*1000) % 1000)/1000
+                _bases, clips = _sprite_bases(self.animal_type)
+                clip = ("walk" if pose == "walk" else
+                        "air" if pose in ("held","fall","stretch") else
+                        "blink" if pose == "blink" and "blink" in clips else
+                        "pet" if pose in ("pet","petted","blink","yawn") else
+                        "sleep" if pose == "sleep" else
+                        "groom" if pose == "groom" else
+                        "idle" if "idle" in clips else "rest")
+                frame = min(len(clips[clip])-1, int(motion_phase*len(clips[clip])))
+                if pose == "blink" and "blink" not in clips:
+                    frame = 0
+                # Continuous artwork supplies the breath and tail clock itself.
+                tail_offset, breath = 0, 0
         direction = 1 if pose == "peek" or (pose == PETTED and self.animal_type == "Cat") else self.motion.direction
         key = pose, frame, direction, tail_offset, breath, dangle, self.animal_type, self.palette, stretch
+        if animated_art:
+            key = key[:-1] + (motion_phase, stretch)
         if key != self._frame_key:
             if key not in self._frames:
                 if pose == "peek":
                     pixmap = draw_peek(self.animal_type, self.palette)
-                elif self.animal_type in ("Cat", "Dog", "Fox"):
+                elif animated_art:
                     pixmap = DRAWERS[self.animal_type](*key[:6], palette=self.palette,
-                        stretch=stretch, target_size=(self.width(),self.height()))
+                        stretch=stretch, target_size=(self.width(),self.height()), motion_phase=motion_phase)
                 else:
                     pixmap = DRAWERS[self.animal_type](*key[:6], palette=self.palette, stretch=stretch)
                 if pixmap.size() != self.size():
                     pixmap = pixmap.scaled(self.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
                                            Qt.TransformationMode.FastTransformation)
-                # Cache only a bounded set of quantized grid poses, never 60 images/sec.
                 if len(self._frames) >= 128:
                     self._frames.pop(next(iter(self._frames)))
                 self._frames[key] = pixmap, QRegion(pixmap.mask())
             self._pixmap, mask = self._frames[key]
-            # Transparent pixels pass clicks through; only the cat is draggable.
             if self.mask() != mask:
                 self.setMask(mask)
             self._frame_key = key
             self.update()
-
     def _tick(self, now: float | None = None) -> None:
         if self._latched or self._paused or self._user_hidden:
             return
         now = time.monotonic() if now is None else now
-        dt, self._last_time = min(max(0.0, now - self._last_time), 0.1), now
+        elapsed = max(0.0, now - self._last_time)
+        dt, self._last_time = min(elapsed, 0.1), now
         # Speech uses a real deadline, even if a menu or a system sleep stalls physics.
         if self._pet_until and now >= self._pet_until:
             self._dismiss_reaction()
@@ -2257,7 +2400,9 @@ class DesktopCat(QWidget):
         if area != self._last_area and self.motion.state != "held":
             self.motion.constrain(area)
             self._last_area = area
-        self._animation_time += dt
+        # Artwork follows elapsed active time even when a slow frame requires
+        # limiting the physics step. Pause/latch update _last_time on resume.
+        self._animation_time += elapsed
         if self._habit is not None:
             if self.motion.state != "rest" or self.motion.sleeping or self._pet_until:
                 self._cancel_habit()

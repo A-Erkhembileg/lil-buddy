@@ -25,7 +25,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_NAME = "Lil Buddy"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 BUNDLE_ID = "com.lilbuddy.desktop"
 EXCLUDED_MODULES = ["PySide2", "PySide6", "PyQt5", "tkinter", "matplotlib",
                     "numpy", "scipy", "pandas", "IPython", "pytest"]
@@ -88,9 +88,8 @@ def render_spec(host: str, root: Path, icons: dict[str, Path], notices: Path | N
     if host not in ("darwin", "win32"):
         raise ValueError("Build apps on macOS or Windows; cross-compilation is unsupported.")
     imports = ["AppKit", "Foundation", "CoreFoundation", "objc"] if host == "darwin" else []
-    data = [(str(root / "artwork" / name), "artwork") for name in (
-        "cat-character-sheet.png", "dog-character-sheet.png",
-        "fox-character-model.png", "fox-walk-sheet.png", "fox-expression-sheet.png")]
+    data = [(str(root / "artwork" / "motion" / (animal + extension)), "artwork/motion")
+            for animal in ("cat", "dog", "fox") for extension in (".png", ".json")]
     if notices is not None:
         data.append((str(notices), "Licenses"))
     icon = str(icons["icns" if host == "darwin" else "ico"])

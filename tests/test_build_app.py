@@ -40,9 +40,8 @@ class BuildConfigurationTests(unittest.TestCase):
 
     def test_native_apps_bundle_all_runtime_animal_artwork_with_optional_licenses(self):
         expected_artwork = {
-            (str(self.root / "artwork" / name), "artwork") for name in (
-                "cat-character-sheet.png", "dog-character-sheet.png",
-                "fox-character-model.png", "fox-walk-sheet.png", "fox-expression-sheet.png")}
+            (str(self.root / "artwork" / "motion" / (animal+extension)), "artwork/motion")
+            for animal in ("cat", "dog", "fox") for extension in (".png", ".json")}
         for host in ("darwin", "win32"):
             for notices in (None, self.root / "notices"):
                 with self.subTest(host=host, notices=notices):
@@ -56,13 +55,15 @@ class BuildConfigurationTests(unittest.TestCase):
                     expected = expected_artwork | ({(str(notices), "Licenses")} if notices else set())
                     self.assertEqual(set(datas), expected)
 
-    def test_runtime_animal_artwork_exists_as_png_files(self):
-        for name in ("cat-character-sheet.png", "dog-character-sheet.png",
-                     "fox-character-model.png", "fox-walk-sheet.png", "fox-expression-sheet.png"):
-            with self.subTest(asset=name):
-                path = ROOT / "artwork" / name
+    def test_runtime_motion_atlases_and_manifests_are_bundled(self):
+        for animal in ("cat", "dog", "fox"):
+            with self.subTest(animal=animal):
+                path = ROOT / "artwork" / "motion" / (animal+".png")
                 self.assertTrue(path.is_file(), f"Missing runtime artwork: {path}")
                 self.assertTrue(path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+                manifest = json.loads(path.with_suffix(".json").read_text())
+                self.assertEqual(manifest["image"], path.name)
+                self.assertEqual(len(manifest["clips"]["walk"]), 16)
 
     def test_windows_archive_contains_executable_and_installation_notes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -88,9 +89,10 @@ class BuildConfigurationTests(unittest.TestCase):
             with zipfile.ZipFile(notices / "Application-Source.zip") as source:
                 self.assertEqual(source.read("desktop_cat.py"), (ROOT / "desktop_cat.py").read_bytes())
                 self.assertIn("tools/build_app.py", source.namelist())
-                for name in ("cat-character-sheet.png", "dog-character-sheet.png",
-                             "fox-character-model.png", "fox-walk-sheet.png", "fox-expression-sheet.png"):
-                    self.assertEqual(source.read("artwork/" + name), (ROOT / "artwork" / name).read_bytes())
+                for animal in ("cat", "dog", "fox"):
+                    for extension in (".png", ".json"):
+                        path = "artwork/motion/" + animal + extension
+                        self.assertEqual(source.read(path), (ROOT / path).read_bytes())
                 self.assertFalse(any(".venv" in name or name.startswith("build/") for name in source.namelist()))
             self.assertEqual(json.loads((notices / "build-info.json").read_text())["version"], APP_VERSION)
             executable = folder / "Lil Buddy.exe"

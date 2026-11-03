@@ -1,0 +1,1385 @@
+{
+  "format_version": 1,
+  "image": "fox.png",
+  "animal": "Fox",
+  "cell_size": [
+    400,
+    320
+  ],
+  "frames": [
+    [
+      0,
+      0,
+      400,
+      320
+    ],
+    [
+      400,
+      0,
+      400,
+      320
+    ],
+    [
+      800,
+      0,
+      400,
+      320
+    ],
+    [
+      1200,
+      0,
+      400,
+      320
+    ],
+    [
+      1600,
+      0,
+      400,
+      320
+    ],
+    [
+      2000,
+      0,
+      400,
+      320
+    ],
+    [
+      2400,
+      0,
+      400,
+      320
+    ],
+    [
+      2800,
+      0,
+      400,
+      320
+    ],
+    [
+      0,
+      320,
+      400,
+      320
+    ],
+    [
+      400,
+      320,
+      400,
+      320
+    ],
+    [
+      800,
+      320,
+      400,
+      320
+    ],
+    [
+      1200,
+      320,
+      400,
+      320
+    ],
+    [
+      1600,
+      320,
+      400,
+      320
+    ],
+    [
+      2000,
+      320,
+      400,
+      320
+    ],
+    [
+      2400,
+      320,
+      400,
+      320
+    ],
+    [
+      2800,
+      320,
+      400,
+      320
+    ],
+    [
+      0,
+      640,
+      400,
+      320
+    ],
+    [
+      400,
+      640,
+      400,
+      320
+    ],
+    [
+      800,
+      640,
+      400,
+      320
+    ],
+    [
+      1200,
+      640,
+      400,
+      320
+    ],
+    [
+      1600,
+      640,
+      400,
+      320
+    ],
+    [
+      2000,
+      640,
+      400,
+      320
+    ],
+    [
+      2400,
+      640,
+      400,
+      320
+    ],
+    [
+      2800,
+      640,
+      400,
+      320
+    ],
+    [
+      0,
+      960,
+      400,
+      320
+    ],
+    [
+      400,
+      960,
+      400,
+      320
+    ],
+    [
+      800,
+      960,
+      400,
+      320
+    ],
+    [
+      1200,
+      960,
+      400,
+      320
+    ],
+    [
+      1600,
+      960,
+      400,
+      320
+    ],
+    [
+      2000,
+      960,
+      400,
+      320
+    ],
+    [
+      2400,
+      960,
+      400,
+      320
+    ],
+    [
+      2800,
+      960,
+      400,
+      320
+    ],
+    [
+      0,
+      1280,
+      400,
+      320
+    ],
+    [
+      400,
+      1280,
+      400,
+      320
+    ],
+    [
+      800,
+      1280,
+      400,
+      320
+    ],
+    [
+      1200,
+      1280,
+      400,
+      320
+    ]
+  ],
+  "clips": {
+    "rest": [
+      0
+    ],
+    "idle": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "walk": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "pet": [
+      21,
+      22,
+      23,
+      24,
+      25,
+      26
+    ],
+    "air": [
+      27,
+      28,
+      29,
+      30,
+      31,
+      32
+    ],
+    "sleep": [
+      33,
+      34
+    ],
+    "groom": [
+      35
+    ]
+  },
+  "sources": {
+    "walk": {
+      "file": "fox-walk.png",
+      "size": [
+        1254,
+        1254
+      ]
+    },
+    "reactions": {
+      "file": "fox-reactions.png",
+      "size": [
+        1254,
+        1254
+      ]
+    }
+  },
+  "registration": {
+    "idle": {
+      "scale": 1.1063829787234043,
+      "source_ground_median": 288.0,
+      "canvas_ground_median": 316.638,
+      "registration": "face-dark-feature-x / robust-contact-baseline-y",
+      "frames": [
+        {
+          "source_cell": 0,
+          "source_rect": [
+            0,
+            0,
+            314,
+            314
+          ],
+          "source_bounds": [
+            16,
+            13,
+            274,
+            290
+          ],
+          "head_anchor": [
+            201.222,
+            116.751
+          ],
+          "source_ground_y": 288.0,
+          "translation": [
+            0.658,
+            0.0
+          ],
+          "canvas_position": [
+            40,
+            -2
+          ],
+          "canvas_head_anchor": [
+            262.628,
+            127.171
+          ],
+          "canvas_ground_y": 316.638
+        },
+        {
+          "source_cell": 1,
+          "source_rect": [
+            314,
+            0,
+            627,
+            314
+          ],
+          "source_bounds": [
+            14,
+            10,
+            277,
+            290
+          ],
+          "head_anchor": [
+            201.853,
+            113.279
+          ],
+          "source_ground_y": 288.0,
+          "translation": [
+            0.027,
+            0.0
+          ],
+          "canvas_position": [
+            39,
+            -2
+          ],
+          "canvas_head_anchor": [
+            262.327,
+            123.33
+          ],
+          "canvas_ground_y": 316.638
+        },
+        {
+          "source_cell": 2,
+          "source_rect": [
+            627,
+            0,
+            940,
+            314
+          ],
+          "source_bounds": [
+            17,
+            8,
+            277,
+            290
+          ],
+          "head_anchor": [
+            201.907,
+            112.641
+          ],
+          "source_ground_y": 288.0,
+          "translation": [
+            -0.027,
+            0.0
+          ],
+          "canvas_position": [
+            39,
+            -2
+          ],
+          "canvas_head_anchor": [
+            262.386,
+            122.624
+          ],
+          "canvas_ground_y": 316.638
+        },
+        {
+          "source_cell": 3,
+          "source_rect": [
+            940,
+            0,
+            1254,
+            314
+          ],
+          "source_bounds": [
+            16,
+            16,
+            276,
+            290
+          ],
+          "head_anchor": [
+            202.784,
+            115.898
+          ],
+          "source_ground_y": 288.0,
+          "translation": [
+            -0.904,
+            0.0
+          ],
+          "canvas_position": [
+            38,
+            -2
+          ],
+          "canvas_head_anchor": [
+            262.357,
+            126.228
+          ],
+          "canvas_ground_y": 316.638
+        }
+      ]
+    },
+    "walk": {
+      "scale": 1.2283464566929134,
+      "source_ground_median": 271.5,
+      "canvas_ground_median": 309.496,
+      "registration": "face-dark-feature-x / robust-contact-baseline-y",
+      "frames": [
+        {
+          "source_cell": 0,
+          "source_rect": [
+            0,
+            0,
+            314,
+            314
+          ],
+          "source_bounds": [
+            10,
+            25,
+            304,
+            274
+          ],
+          "head_anchor": [
+            222.561,
+            112.534
+          ],
+          "source_ground_y": 271.0,
+          "translation": [
+            2.806,
+            0.0
+          ],
+          "canvas_position": [
+            10,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.382,
+            114.23
+          ],
+          "canvas_ground_y": 308.882
+        },
+        {
+          "source_cell": 1,
+          "source_rect": [
+            314,
+            0,
+            627,
+            314
+          ],
+          "source_bounds": [
+            9,
+            27,
+            303,
+            275
+          ],
+          "head_anchor": [
+            222.572,
+            112.726
+          ],
+          "source_ground_y": 272.0,
+          "translation": [
+            2.795,
+            0.0
+          ],
+          "canvas_position": [
+            10,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.395,
+            114.467
+          ],
+          "canvas_ground_y": 310.11
+        },
+        {
+          "source_cell": 2,
+          "source_rect": [
+            627,
+            0,
+            940,
+            314
+          ],
+          "source_bounds": [
+            10,
+            26,
+            305,
+            273
+          ],
+          "head_anchor": [
+            225.557,
+            111.898
+          ],
+          "source_ground_y": 271.0,
+          "translation": [
+            -0.19,
+            0.0
+          ],
+          "canvas_position": [
+            6,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.062,
+            113.45
+          ],
+          "canvas_ground_y": 308.882
+        },
+        {
+          "source_cell": 3,
+          "source_rect": [
+            940,
+            0,
+            1254,
+            314
+          ],
+          "source_bounds": [
+            10,
+            26,
+            305,
+            273
+          ],
+          "head_anchor": [
+            224.688,
+            112.947
+          ],
+          "source_ground_y": 271.0,
+          "translation": [
+            0.679,
+            0.0
+          ],
+          "canvas_position": [
+            7,
+            -24
+          ],
+          "canvas_head_anchor": [
+            282.995,
+            114.738
+          ],
+          "canvas_ground_y": 308.882
+        },
+        {
+          "source_cell": 4,
+          "source_rect": [
+            0,
+            314,
+            314,
+            627
+          ],
+          "source_bounds": [
+            10,
+            26,
+            305,
+            277
+          ],
+          "head_anchor": [
+            226.526,
+            113.889
+          ],
+          "source_ground_y": 274.0,
+          "translation": [
+            -1.159,
+            0.0
+          ],
+          "canvas_position": [
+            5,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.252,
+            115.895
+          ],
+          "canvas_ground_y": 312.567
+        },
+        {
+          "source_cell": 5,
+          "source_rect": [
+            314,
+            314,
+            627,
+            627
+          ],
+          "source_bounds": [
+            9,
+            26,
+            304,
+            279
+          ],
+          "head_anchor": [
+            225.716,
+            113.836
+          ],
+          "source_ground_y": 276.0,
+          "translation": [
+            -0.35,
+            0.0
+          ],
+          "canvas_position": [
+            6,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.258,
+            115.83
+          ],
+          "canvas_ground_y": 315.024
+        },
+        {
+          "source_cell": 6,
+          "source_rect": [
+            627,
+            314,
+            940,
+            627
+          ],
+          "source_bounds": [
+            10,
+            26,
+            305,
+            279
+          ],
+          "head_anchor": [
+            226.658,
+            113.742
+          ],
+          "source_ground_y": 276.0,
+          "translation": [
+            -1.291,
+            0.0
+          ],
+          "canvas_position": [
+            5,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.414,
+            115.715
+          ],
+          "canvas_ground_y": 315.024
+        },
+        {
+          "source_cell": 7,
+          "source_rect": [
+            940,
+            314,
+            1254,
+            627
+          ],
+          "source_bounds": [
+            10,
+            26,
+            305,
+            277
+          ],
+          "head_anchor": [
+            226.959,
+            113.458
+          ],
+          "source_ground_y": 274.0,
+          "translation": [
+            -1.592,
+            0.0
+          ],
+          "canvas_position": [
+            4,
+            -24
+          ],
+          "canvas_head_anchor": [
+            282.784,
+            115.365
+          ],
+          "canvas_ground_y": 312.567
+        },
+        {
+          "source_cell": 8,
+          "source_rect": [
+            0,
+            627,
+            314,
+            940
+          ],
+          "source_bounds": [
+            10,
+            28,
+            305,
+            275
+          ],
+          "head_anchor": [
+            226.505,
+            113.958
+          ],
+          "source_ground_y": 273.0,
+          "translation": [
+            -1.139,
+            0.0
+          ],
+          "canvas_position": [
+            5,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.227,
+            115.98
+          ],
+          "canvas_ground_y": 311.339
+        },
+        {
+          "source_cell": 9,
+          "source_rect": [
+            314,
+            627,
+            627,
+            940
+          ],
+          "source_bounds": [
+            9,
+            28,
+            304,
+            274
+          ],
+          "head_anchor": [
+            224.299,
+            113.651
+          ],
+          "source_ground_y": 268.0,
+          "translation": [
+            1.068,
+            0.0
+          ],
+          "canvas_position": [
+            8,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.517,
+            115.603
+          ],
+          "canvas_ground_y": 305.197
+        },
+        {
+          "source_cell": 10,
+          "source_rect": [
+            627,
+            627,
+            940,
+            940
+          ],
+          "source_bounds": [
+            10,
+            29,
+            305,
+            275
+          ],
+          "head_anchor": [
+            226.267,
+            113.344
+          ],
+          "source_ground_y": 270.0,
+          "translation": [
+            -0.9,
+            0.0
+          ],
+          "canvas_position": [
+            5,
+            -24
+          ],
+          "canvas_head_anchor": [
+            282.934,
+            115.225
+          ],
+          "canvas_ground_y": 307.654
+        },
+        {
+          "source_cell": 11,
+          "source_rect": [
+            940,
+            627,
+            1254,
+            940
+          ],
+          "source_bounds": [
+            10,
+            29,
+            305,
+            276
+          ],
+          "head_anchor": [
+            224.359,
+            113.855
+          ],
+          "source_ground_y": 273.0,
+          "translation": [
+            1.007,
+            0.0
+          ],
+          "canvas_position": [
+            8,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.591,
+            115.853
+          ],
+          "canvas_ground_y": 311.339
+        },
+        {
+          "source_cell": 12,
+          "source_rect": [
+            0,
+            940,
+            314,
+            1254
+          ],
+          "source_bounds": [
+            10,
+            29,
+            304,
+            276
+          ],
+          "head_anchor": [
+            224.877,
+            113.904
+          ],
+          "source_ground_y": 273.0,
+          "translation": [
+            0.489,
+            0.0
+          ],
+          "canvas_position": [
+            7,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.227,
+            115.914
+          ],
+          "canvas_ground_y": 311.339
+        },
+        {
+          "source_cell": 13,
+          "source_rect": [
+            314,
+            940,
+            627,
+            1254
+          ],
+          "source_bounds": [
+            9,
+            29,
+            303,
+            276
+          ],
+          "head_anchor": [
+            224.887,
+            113.639
+          ],
+          "source_ground_y": 271.0,
+          "translation": [
+            0.48,
+            0.0
+          ],
+          "canvas_position": [
+            7,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.239,
+            115.588
+          ],
+          "canvas_ground_y": 308.882
+        },
+        {
+          "source_cell": 14,
+          "source_rect": [
+            627,
+            940,
+            940,
+            1254
+          ],
+          "source_bounds": [
+            10,
+            29,
+            304,
+            274
+          ],
+          "head_anchor": [
+            225.177,
+            113.83
+          ],
+          "source_ground_y": 271.0,
+          "translation": [
+            0.19,
+            0.0
+          ],
+          "canvas_position": [
+            7,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.595,
+            115.823
+          ],
+          "canvas_ground_y": 308.882
+        },
+        {
+          "source_cell": 15,
+          "source_rect": [
+            940,
+            940,
+            1254,
+            1254
+          ],
+          "source_bounds": [
+            10,
+            27,
+            305,
+            274
+          ],
+          "head_anchor": [
+            225.923,
+            112.817
+          ],
+          "source_ground_y": 270.0,
+          "translation": [
+            -0.556,
+            0.0
+          ],
+          "canvas_position": [
+            6,
+            -24
+          ],
+          "canvas_head_anchor": [
+            283.512,
+            114.578
+          ],
+          "canvas_ground_y": 307.654
+        }
+      ]
+    },
+    "pet": {
+      "scale": 1.1345454545454545,
+      "source_ground_median": 287.0,
+      "canvas_ground_median": 315.615,
+      "registration": "face-dark-feature-x / robust-contact-baseline-y",
+      "frames": [
+        {
+          "source_cell": 4,
+          "source_rect": [
+            0,
+            314,
+            314,
+            627
+          ],
+          "source_bounds": [
+            16,
+            15,
+            274,
+            290
+          ],
+          "head_anchor": [
+            194.373,
+            126.409
+          ],
+          "source_ground_y": 287.0,
+          "translation": [
+            -0.16,
+            0.0
+          ],
+          "canvas_position": [
+            29,
+            -10
+          ],
+          "canvas_head_anchor": [
+            249.525,
+            133.417
+          ],
+          "canvas_ground_y": 315.615
+        },
+        {
+          "source_cell": 5,
+          "source_rect": [
+            314,
+            314,
+            627,
+            627
+          ],
+          "source_bounds": [
+            13,
+            20,
+            277,
+            290
+          ],
+          "head_anchor": [
+            194.053,
+            125.45
+          ],
+          "source_ground_y": 287.0,
+          "translation": [
+            0.16,
+            0.0
+          ],
+          "canvas_position": [
+            29,
+            -10
+          ],
+          "canvas_head_anchor": [
+            249.162,
+            132.329
+          ],
+          "canvas_ground_y": 315.615
+        },
+        {
+          "source_cell": 6,
+          "source_rect": [
+            627,
+            314,
+            940,
+            627
+          ],
+          "source_bounds": [
+            12,
+            15,
+            282,
+            290
+          ],
+          "head_anchor": [
+            195.469,
+            115.272
+          ],
+          "source_ground_y": 286.0,
+          "translation": [
+            -1.256,
+            0.0
+          ],
+          "canvas_position": [
+            28,
+            -10
+          ],
+          "canvas_head_anchor": [
+            249.769,
+            120.781
+          ],
+          "canvas_ground_y": 314.48
+        },
+        {
+          "source_cell": 7,
+          "source_rect": [
+            940,
+            314,
+            1254,
+            627
+          ],
+          "source_bounds": [
+            8,
+            15,
+            282,
+            290
+          ],
+          "head_anchor": [
+            185.398,
+            115.808
+          ],
+          "source_ground_y": 287.0,
+          "translation": [
+            8.815,
+            0.0
+          ],
+          "canvas_position": [
+            39,
+            -10
+          ],
+          "canvas_head_anchor": [
+            249.342,
+            121.39
+          ],
+          "canvas_ground_y": 315.615
+        },
+        {
+          "source_cell": 8,
+          "source_rect": [
+            0,
+            627,
+            314,
+            940
+          ],
+          "source_bounds": [
+            11,
+            21,
+            281,
+            289
+          ],
+          "head_anchor": [
+            193.477,
+            119.413
+          ],
+          "source_ground_y": 288.0,
+          "translation": [
+            0.736,
+            0.0
+          ],
+          "canvas_position": [
+            30,
+            -10
+          ],
+          "canvas_head_anchor": [
+            249.508,
+            125.479
+          ],
+          "canvas_ground_y": 316.749
+        },
+        {
+          "source_cell": 9,
+          "source_rect": [
+            314,
+            627,
+            627,
+            940
+          ],
+          "source_bounds": [
+            15,
+            20,
+            277,
+            289
+          ],
+          "head_anchor": [
+            196.095,
+            127.048
+          ],
+          "source_ground_y": 288.0,
+          "translation": [
+            -1.882,
+            0.0
+          ],
+          "canvas_position": [
+            27,
+            -10
+          ],
+          "canvas_head_anchor": [
+            249.479,
+            134.142
+          ],
+          "canvas_ground_y": 316.749
+        }
+      ]
+    },
+    "air": {
+      "scale": 1.1568965271708898,
+      "source_ground_median": 276.0,
+      "canvas_ground_median": 301.8325,
+      "registration": "face-dark-feature-x / robust-contact-baseline-y",
+      "frames": [
+        {
+          "source_cell": 10,
+          "source_rect": [
+            627,
+            627,
+            940,
+            940
+          ],
+          "source_bounds": [
+            12,
+            26,
+            274,
+            288
+          ],
+          "head_anchor": [
+            201.881,
+            115.846
+          ],
+          "source_ground_y": 286.0,
+          "translation": [
+            2.39,
+            0.0
+          ],
+          "canvas_position": [
+            39,
+            -16
+          ],
+          "canvas_head_anchor": [
+            272.556,
+            118.022
+          ],
+          "canvas_ground_y": 314.872
+        },
+        {
+          "source_cell": 11,
+          "source_rect": [
+            940,
+            627,
+            1254,
+            940
+          ],
+          "source_bounds": [
+            16,
+            20,
+            274,
+            272
+          ],
+          "head_anchor": [
+            212.804,
+            117.711
+          ],
+          "source_ground_y": 266.0,
+          "translation": [
+            -8.533,
+            0.0
+          ],
+          "canvas_position": [
+            27,
+            -16
+          ],
+          "canvas_head_anchor": [
+            273.193,
+            120.18
+          ],
+          "canvas_ground_y": 291.734
+        },
+        {
+          "source_cell": 12,
+          "source_rect": [
+            0,
+            940,
+            314,
+            1254
+          ],
+          "source_bounds": [
+            10,
+            20,
+            273,
+            249
+          ],
+          "head_anchor": [
+            212.302,
+            105.925
+          ],
+          "source_ground_y": 244.0,
+          "translation": [
+            -8.031,
+            8.854
+          ],
+          "canvas_position": [
+            27,
+            -6
+          ],
+          "canvas_head_anchor": [
+            272.611,
+            116.544
+          ],
+          "canvas_ground_y": 276.283
+        },
+        {
+          "source_cell": 13,
+          "source_rect": [
+            314,
+            940,
+            627,
+            1254
+          ],
+          "source_bounds": [
+            10,
+            26,
+            277,
+            265
+          ],
+          "head_anchor": [
+            203.969,
+            103.752
+          ],
+          "source_ground_y": 259.0,
+          "translation": [
+            0.302,
+            11.026
+          ],
+          "canvas_position": [
+            37,
+            -3
+          ],
+          "canvas_head_anchor": [
+            272.971,
+            117.031
+          ],
+          "canvas_ground_y": 296.636
+        },
+        {
+          "source_cell": 14,
+          "source_rect": [
+            627,
+            940,
+            940,
+            1254
+          ],
+          "source_bounds": [
+            10,
+            37,
+            278,
+            290
+          ],
+          "head_anchor": [
+            204.573,
+            119.092
+          ],
+          "source_ground_y": 287.0,
+          "translation": [
+            -0.302,
+            -0.313
+          ],
+          "canvas_position": [
+            36,
+            -16
+          ],
+          "canvas_head_anchor": [
+            272.67,
+            121.777
+          ],
+          "canvas_ground_y": 316.029
+        },
+        {
+          "source_cell": 15,
+          "source_rect": [
+            940,
+            940,
+            1254,
+            1254
+          ],
+          "source_bounds": [
+            12,
+            40,
+            279,
+            290
+          ],
+          "head_anchor": [
+            202.96,
+            126.803
+          ],
+          "source_ground_y": 287.0,
+          "translation": [
+            1.311,
+            -8.025
+          ],
+          "canvas_position": [
+            38,
+            -25
+          ],
+          "canvas_head_anchor": [
+            272.804,
+            121.698
+          ],
+          "canvas_ground_y": 307.029
+        }
+      ]
+    }
+  }
+}

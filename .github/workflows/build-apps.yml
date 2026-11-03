@@ -216,7 +216,7 @@ jobs:
 
           Left-click to pet, drag to pick up, and right-click for animals, colors, sizes, and controls. Crow can take flight. Use the menu-bar/system-tray icon to pause, show, hide, or quit.
 
-          Updated Cat, Dog, and Fox use their detailed character artwork directly: an orange tabby, a charcoal-and-white husky, and the approved golden-orange fox with purple eyes and a full cream-tipped tail. Their walking, petting, airborne, sleeping, and grooming poses preserve the supplied models. All required artwork is bundled in the apps. GIF previews and full-detail animation atlases are included in the source artwork folder.
+          Smoother Cat, Husky, and Fox animation: each now has sixteen drawn walking poses, four idle poses, six petting poses, and six airborne poses. Stable body registration removes silhouette-based recentering, continuous secondary motion runs on the 16 ms timer, and dragging-to-falling preserves the airborne phase. The approved models, colors, and full-detail artwork are retained. Runtime atlases, authored sheets, compact GIFs, and a full 60 fps MP4 preview are included in the source artwork folder.
 
           Windows fullscreen detection now uses the pet's native monitor handle. This fixes corner mode failing to start on displays whose friendly monitor name differs from the Windows display ID, including fullscreen Chrome/YouTube.
 
