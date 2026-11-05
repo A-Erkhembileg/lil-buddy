@@ -41,7 +41,7 @@ class BuildConfigurationTests(unittest.TestCase):
     def test_native_apps_bundle_all_runtime_animal_artwork_with_optional_licenses(self):
         expected_artwork = {
             (str(self.root / "artwork" / "motion" / (animal+extension)), "artwork/motion")
-            for animal in ("cat", "dog", "fox") for extension in (".png", ".json")}
+            for animal in ("cat", "dog", "fox") for extension in (".png", ".json", "-transitions.png", "-transitions.json")}
         for host in ("darwin", "win32"):
             for notices in (None, self.root / "notices"):
                 with self.subTest(host=host, notices=notices):

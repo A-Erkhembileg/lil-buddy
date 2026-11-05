@@ -25,7 +25,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_NAME = "Lil Buddy"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 BUNDLE_ID = "com.lilbuddy.desktop"
 EXCLUDED_MODULES = ["PySide2", "PySide6", "PyQt5", "tkinter", "matplotlib",
                     "numpy", "scipy", "pandas", "IPython", "pytest"]
@@ -89,7 +89,7 @@ def render_spec(host: str, root: Path, icons: dict[str, Path], notices: Path | N
         raise ValueError("Build apps on macOS or Windows; cross-compilation is unsupported.")
     imports = ["AppKit", "Foundation", "CoreFoundation", "objc"] if host == "darwin" else []
     data = [(str(root / "artwork" / "motion" / (animal + extension)), "artwork/motion")
-            for animal in ("cat", "dog", "fox") for extension in (".png", ".json")]
+            for animal in ("cat", "dog", "fox") for extension in (".png", ".json", "-transitions.png", "-transitions.json")]
     if notices is not None:
         data.append((str(notices), "Licenses"))
     icon = str(icons["icns" if host == "darwin" else "ico"])
@@ -240,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"command": command, "application": str(output), "zip": str(archive)}, indent=2))
         return 0
     environment = os.environ.copy()
+    environment.setdefault("PYINSTALLER_CONFIG_DIR",str(work / "cache"))
     environment.setdefault("PYTHONHASHSEED", "0")
     environment.setdefault("SOURCE_DATE_EPOCH", "1767225600")
     subprocess.run(command, cwd=ROOT, env=environment, check=True)

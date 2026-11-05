@@ -20,7 +20,7 @@ class PhysicsTests(unittest.TestCase):
         self.rng = random.Random(12)
         self.left, self.right, self.top, self.floor = Motion.limits(self.area)
 
-    def test_drop_accelerates_bounces_and_settles(self):
+    def test_drop_accelerates_absorbs_impact_and_settles(self):
         cat = Motion(x=-700, y=0, state="fall", roaming=False)
         bounces = 0
         for _ in range(3 * 120):
@@ -32,8 +32,7 @@ class PhysicsTests(unittest.TestCase):
         self.assertEqual(cat.state, "rest")
         self.assertEqual(cat.y, self.floor)
         self.assertEqual(cat.vy, 0)
-        self.assertGreater(bounces, 0)
-        self.assertLess(bounces, 4)
+        self.assertEqual(bounces, 0, "Contact is absorbed through the legs, not a window bounce.")
 
     def test_freefall_is_independent_of_refresh_rate(self):
         positions = []
@@ -52,7 +51,12 @@ class PhysicsTests(unittest.TestCase):
                 cat = Motion(x=x, y=self.floor, direction=direction, state="walk")
                 cat.step(1 / 60, self.area, self.rng)
                 self.assertEqual(cat.x, edge)
+                self.assertEqual(cat.direction, direction)
+                self.assertEqual(cat.state, "turn")
+                for _ in range(60):
+                    cat.step(1 / 120, self.area, self.rng)
                 self.assertEqual(cat.direction, -direction)
+                self.assertEqual(cat.state, "walk")
 
     def test_negative_screen_origin_and_new_floor(self):
         cat = Motion(x=-900, y=self.floor)
@@ -135,7 +139,7 @@ class WidgetTests(unittest.TestCase):
             self.send_mouse(QEvent.Type.MouseButtonRelease, click,
                             Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton)
             pet.assert_called_once()
-        self.assertEqual(self.cat.motion.state, PETTED)
+        self.assertEqual(self.cat.motion.state, "sit")
         self.assertFalse(self.cat.motion.sleeping)
         self.assertIn(self.cat.bubble.text, CAT_QUOTES)
         self.assertTrue(self.cat.bubble.isVisible())
@@ -186,7 +190,8 @@ class WidgetTests(unittest.TestCase):
         deadline = self.cat.motion.decision_in
         self.assertEqual(self.cat.bubble.expires_at, 100.0 + BUBBLE_SECONDS)
         self.assertTrue(self.cat.motion.roaming)
-        self.cat._tick(now=102.9)
+        for tick in range(1, 175):
+            self.cat._tick(now=100.0 + tick / 60)
         self.assertEqual(self.cat.motion.x, position)
         self.assertEqual(self.cat.motion.decision_in, deadline)
         self.assertEqual(self.cat.motion.state, PETTED)
@@ -334,7 +339,7 @@ class WidgetTests(unittest.TestCase):
     def test_pause_stops_walk_but_does_not_suspend_a_fall(self):
         self.cat.motion.state = "walk"
         self.cat._toggle_roaming(False)
-        self.assertEqual(self.cat.motion.state, "rest")
+        self.assertEqual(self.cat.motion.state, "sit")
         self.cat.motion.state = "fall"
         self.cat.motion.vy = 100
         self.cat._toggle_roaming(False)

@@ -23,7 +23,7 @@ class CharacterAssetTests(unittest.TestCase):
                 self.assertGreater(len(colors), 200)
                 self.assertEqual(image.pixelColor(0,0).alpha(), 0)
 
-    def test_every_supplied_walking_frame_is_used_and_distinct(self):
+    def test_sixteen_samples_of_the_continuous_walk_are_distinct_and_loop(self):
         for animal,count in (("Cat",16),("Dog",16),("Fox",16)):
             frames = [pet.DRAWERS[animal]("walk",i,1).toImage() for i in range(count)]
             with self.subTest(animal=animal):

@@ -124,7 +124,12 @@ class PreferencesAndControlsTests(unittest.TestCase):
                 self.cat.motion.decision_in = 10
                 self.cat.motion.step(1 / 60, area, self.cat.rng)
                 self.assertEqual(self.cat.motion.x, right)
+                self.assertEqual(self.cat.motion.state, "turn")
+                self.assertEqual(self.cat.motion.direction, 1)
+                for _ in range(32):
+                    self.cat.motion.step(1 / 120, area, self.cat.rng)
                 self.assertEqual(self.cat.motion.direction, -1)
+                self.assertEqual(self.cat.motion.x, right)
                 self.assertEqual(self.cat.motion.y, floor)
 
     def test_resizing_a_grounded_pet_keeps_its_feet_on_the_floor(self):

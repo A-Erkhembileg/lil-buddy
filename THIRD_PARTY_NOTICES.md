@@ -63,8 +63,8 @@ is required. The macOS build script applies an ad-hoc signature, which you can
 regenerate locally. The application imposes no restriction on reverse
 engineering for debugging changes to the linked libraries.
 
-Pillow is used only by the build/export tools and is not an application runtime
-dependency. Other build tools and operating-system libraries retain their own
+Pillow renders alternate coat colors and is also used by the build/export tools.
+Its distribution notices are included in `licenses/Pillow.txt`. Other build tools and operating-system libraries retain their own
 licenses. The project does not bundle Steam game assets, trademarks, downloaded
 fonts, or third-party animal artwork.
 

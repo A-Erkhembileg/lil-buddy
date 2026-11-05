@@ -53,6 +53,9 @@ class FlightDynamicsTests(unittest.TestCase):
             positions.append((self.motion.x, self.motion.y))
             if self.motion.state != "fly":
                 break
+        self.assertEqual(self.motion.state, "land")
+        for _ in range(2 * 120):
+            self.motion.step(1 / 120, self.area, self.rng)
         self.assertEqual(self.motion.state, "rest")
         self.assertEqual(self.motion.y, self.floor)
         self.assertEqual(self.motion.vy, 0)
@@ -290,6 +293,53 @@ class CrowInteractionTests(unittest.TestCase):
         self.cat._sync_menu_checks(menu)
         self.assertTrue(action.isVisible())
         self.assertFalse(action.isEnabled())
+
+
+class CrowArticulationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_wing_bones_keep_their_lengths_during_power_and_fold(self):
+        for frame in range(8):
+            for fold in (0.0, 0.25, 0.5, 0.75, 1.0):
+                _, shoulder, elbow, wrist = pet._crow_wing_points(frame, fold)
+                self.assertAlmostEqual(math.dist(shoulder, elbow), 10.5)
+                self.assertAlmostEqual(math.dist(elbow, wrist), 10.0)
+
+    def test_landing_has_planted_toes_and_finishes_in_the_perched_drawing(self):
+        for tick in range(61):
+            image = pet.draw_crow("land", 0, 1, motion_phase=tick/60).toImage()
+            self.assertTrue(any(image.pixelColor(x, image.height()-1).alpha()
+                                for x in range(image.width())))
+        self.assertEqual(image, pet.draw_crow("rest", 0, 1).toImage())
+
+    def test_turn_projects_at_midpoint_then_recovers_without_softening_pixels(self):
+        start=pet.draw_crow("turn",0,1,motion_phase=0).toImage()
+        middle=pet.draw_crow("turn",0,1,motion_phase=0.5).toImage()
+        end=pet.draw_crow("turn",0,-1,motion_phase=1).toImage()
+        self.assertEqual(start,pet.draw_crow("rest",0,1).toImage())
+        self.assertEqual(end,pet.draw_crow("rest",0,-1).toImage())
+        def span(image):
+            xs=[x for x in range(image.width()) for y in range(image.height())
+                if image.pixelColor(x,y).alpha()]
+            return max(xs)-min(xs)+1
+        self.assertLess(span(middle),span(start)*0.4)
+        for tick in range(25):
+            image=pet.draw_crow("turn",0,1,motion_phase=tick/24).toImage()
+            self.assertTrue(any(image.pixelColor(x,image.height()-1).alpha()
+                                for x in range(image.width())))
+            self.assertTrue(all(image.pixelColor(x,y).alpha() in (0,255)
+                                for y in range(image.height()) for x in range(image.width())))
+
+    def test_airborne_mechanics_are_distinct_and_keep_binary_pixel_edges(self):
+        images=[]
+        for pose in ("fly", "held", "fall"):
+            image=pet.draw_crow(pose, 2, 1, stretch=3).toImage()
+            self.assertTrue(all(image.pixelColor(x,y).alpha() in (0,255)
+                                for y in range(image.height()) for x in range(image.width())))
+            images.append(bytes(image.constBits().asstring(image.sizeInBytes())))
+        self.assertEqual(len(set(images)), 3)
 
 
 if __name__ == "__main__":

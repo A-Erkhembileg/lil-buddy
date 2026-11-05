@@ -141,15 +141,21 @@ class AnimalHabitDispatchTests(unittest.TestCase):
                         self.assertEqual(self.cat._pixmap.size(), self.cat.size())
                         self.assertFalse(self.cat.mask().isEmpty())
 
-    def test_cursor_attention_changes_direction_and_pupil_height(self):
-        self.cat._habit, self.cat._habit_elapsed = "watch", 0.2
+    def test_cursor_attention_turns_before_changing_direction(self):
+        self.cat.motion.direction = 1
+        self.cat._habit, self.cat._habit_elapsed, self.cat._habit_duration = "watch", 0.2, 2.4
         center = self.cat.geometry().center()
-        for location, direction, vertical in ((center+QPoint(-100, -100), -1, -1),
-                                               (center+QPoint(100, 100), 1, 1)):
-            with patch.object(pet.QCursor, "pos", return_value=location):
-                self.cat._set_frame()
-            self.assertEqual(self.cat._frame_key[2], direction)
-            self.assertEqual(self.cat._frame_key[5], vertical)
+        with patch.object(pet.QCursor, "pos", return_value=center+QPoint(-100, -100)):
+            self.cat._set_frame()
+            self.assertEqual(self.cat._frame_key[2], 1)
+            self.assertEqual(self.cat._frame_key[5], -1)
+            self.cat._last_time = 100.0
+            self.cat._tick(now=100.02)
+            self.assertEqual(self.cat.motion.state, "turn")
+            self.assertEqual(self.cat.motion.direction, 1)
+            for tick in range(2, 20):
+                self.cat._tick(now=100.0+tick/60)
+            self.assertEqual(self.cat.motion.direction, -1)
 
     def test_pet_reaction_uses_the_selected_species_personality(self):
         for name in pet.DRAWERS:

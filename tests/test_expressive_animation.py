@@ -19,20 +19,20 @@ class ImpactTests(unittest.TestCase):
         self.floor = pet.Motion.limits(self.area)[3]
         self.rng = random.Random(12)
 
-    def test_collision_reports_incoming_speed_without_removing_bounce(self):
+    def test_collision_reports_incoming_speed_and_begins_joint_recovery(self):
         cat = pet.Motion(x=-700, y=self.floor - 1, vy=800, state="fall")
         impact = cat.step(1 / 120, self.area, self.rng)
         self.assertGreaterEqual(impact, pet.HARD_LANDING_SPEED)
         self.assertEqual(cat.y, self.floor)
-        self.assertLess(cat.vy, 0)
-        self.assertEqual(cat.state, "fall")
+        self.assertEqual(cat.vy, 0)
+        self.assertEqual(cat.state, "land")
 
     def test_soft_contact_reports_a_small_impact_and_settles(self):
         cat = pet.Motion(x=-700, y=self.floor - 0.1, vy=60, state="fall")
         impact = cat.step(1 / 120, self.area, self.rng)
         self.assertGreater(impact, 0)
         self.assertLess(impact, pet.HARD_LANDING_SPEED)
-        self.assertEqual(cat.state, "rest")
+        self.assertEqual(cat.state, "land")
         self.assertEqual(cat.vy, 0)
 
     def test_freefall_without_collision_has_no_impact_event(self):
@@ -76,31 +76,32 @@ class ExpressiveWidgetTests(unittest.TestCase):
     def test_grounded_pet_enters_petted_until_the_bubble_deadline(self):
         self.cat.motion.state = "walk"
         self.cat.pet(now=100.0)
-        self.assertEqual(self.cat.motion.state, pet.PETTED)
-        self.assertEqual(self.cat._frame_key[0], "petted")
+        self.assertEqual(self.cat.motion.state, "sit")
+        self.assertEqual(self.cat._frame_key[0], "sit")
         self.assertTrue(self.cat.bubble.isVisible())
-        self.cat._tick(now=100.05)
+        for tick in range(1, 39):
+            self.cat._tick(now=100.0+tick/60)
         self.assertEqual(self.cat.motion.state, pet.PETTED)
         self.cat._tick(now=100.0 + pet.BUBBLE_SECONDS + 0.01)
         self.assertEqual(self.cat.motion.state, "rest")
         self.assertFalse(self.cat.bubble.isVisible())
 
-    def test_six_paddling_frames_run_during_both_dragging_and_falling(self):
+    def test_held_pose_settles_and_fall_prepares_for_contact(self):
         for state in ("held", "fall"):
-            images = []
             self.cat.motion.state, self.cat.motion.vy = state, 500
+            self.cat.motion.y = self.floor - 200
             self.cat._animation_time = 10.0
             self.cat._pose_clock_kind = None
             self.cat._set_frame()
-            for frame in range(6):
-                with self.subTest(state=state, frame=frame):
-                    self.cat._animation_time = 10.0 + frame * 0.05 + 0.001
-                    self.cat._set_frame()
-                    self.assertEqual(self.cat._frame_key[:2], (state, frame))
-                    images.append(self.cat._pixmap.toImage())
-            for first in range(6):
-                for second in range(first + 1, 6):
-                    self.assertNotEqual(images[first], images[second])
+            initial = self.cat._pixmap.toImage()
+            self.cat._animation_time += 0.6
+            self.cat._set_frame()
+            settled = self.cat._pixmap.toImage()
+            self.assertNotEqual(initial, settled)
+            self.cat._animation_time += 1.0
+            self.cat._set_frame()
+            self.assertEqual(settled, self.cat._pixmap.toImage(),
+                             "Airborne limbs must not paddle in a repeating loop.")
 
     def test_fall_speed_and_drag_speed_control_stretch_separately(self):
         for state, speed_field in (("fall", "vy"), ("held", "_drag_speed")):
@@ -122,34 +123,47 @@ class ExpressiveWidgetTests(unittest.TestCase):
                 self.assertGreaterEqual(low, 0)
                 self.assertLessEqual(high, 3)
 
-    def test_only_hard_contact_starts_a_floor_anchored_landing_effect(self):
-        for speed, hard in ((60, False), (800, True)):
+    def test_every_contact_starts_a_floor_anchored_landing(self):
+        for speed in (60, 800):
             with self.subTest(speed=speed):
                 self.cat._landing_elapsed = None
                 self.cat.motion.state = "fall"
                 self.cat.motion.y, self.cat.motion.vy = self.floor - 0.1, speed
                 self.cat._last_time = 100.0
                 self.cat._tick(now=100.016)
-                if hard:
-                    self.assertIsNotNone(self.cat._landing_elapsed)
-                    self.assertEqual(self.cat._frame_key[0], "land")
-                    self.assertEqual(self.cat.y(), round(self.floor))
-                else:
-                    self.assertIsNone(self.cat._landing_elapsed)
-                    self.assertNotEqual(self.cat._frame_key[0], "land")
+                self.assertIsNotNone(self.cat._landing_elapsed)
+                self.assertEqual(self.cat._frame_key[0], "land")
+                self.assertEqual(self.cat.y(), round(self.floor))
 
-    def test_landing_runs_three_frames_then_releases_the_visual_override(self):
+    def test_landing_completes_before_sitting_or_reacting(self):
+        self.cat.motion.begin_landing(800)
         self.cat._landing_elapsed = 0.0
-        self.cat.motion.state = "fall"
-        self.cat.motion.y, self.cat.motion.vy = self.floor, -80
-        for frame in range(3):
-            now = 100.0 + frame * pet.LAND_FRAME_SECONDS + 0.001
-            self.cat._tick(now=now)
-            self.assertEqual(self.cat._frame_key[:2], ("land", frame))
+        self.cat.motion.y = self.floor
+        self.cat.motion.decision_in = 0.0
+        self.cat._habit_in = 0.0
+        self.cat.pet(now=100.0)
+        for tick in range(1, 40):
+            self.cat._tick(now=100.0 + tick/60)
+            self.assertEqual(self.cat.motion.state, "land")
+            self.assertEqual(self.cat._frame_key[0], "land")
+            self.assertFalse(self.cat.motion.sleeping)
+            self.assertIsNone(self.cat._habit)
             self.assertEqual(self.cat.y(), round(self.floor))
-        self.cat._tick(now=100.0 + 3 * pet.LAND_FRAME_SECONDS + 0.002)
+        for tick in range(40, 78):
+            self.cat._tick(now=100.0 + tick/60)
         self.assertIsNone(self.cat._landing_elapsed)
-        self.assertNotEqual(self.cat._frame_key[0], "land")
+        self.assertEqual(self.cat.motion.state, pet.PETTED)
+
+    def test_pending_click_does_not_freeze_landing_recovery(self):
+        self.cat.motion.begin_landing(800)
+        self.cat._landing_elapsed = 0.0
+        self.cat.motion.y = self.floor
+        self.cat._press_position = QPointF(self.cat.pos())+QPointF(50,50)
+        for tick in range(1, 46):
+            self.cat._tick(now=100.0+tick/60)
+        self.assertEqual(self.cat.motion.state, "sit")
+        self.assertIsNone(self.cat._landing_elapsed)
+        self.assertFalse(self.cat.motion.sleeping)
 
     def test_new_drag_cancels_landing_and_measures_pointer_speed(self):
         origin = QPointF(self.cat.pos()) + QPointF(75, 60)
@@ -214,8 +228,8 @@ class ExpressiveArtTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_air_stretch_and_three_landing_frames_are_visibly_distinct(self):
-        self.assertNotEqual(pet.draw_cat("fall", 0, 1, stretch=0).toImage(),
-                            pet.draw_cat("fall", 0, 1, stretch=3).toImage())
+        self.assertNotEqual(pet.draw_cat("fall", 0, 1, motion_phase=0).toImage(),
+                            pet.draw_cat("fall", 0, 1, motion_phase=1).toImage())
         images = [pet.draw_cat("land", frame, 1).toImage() for frame in range(3)]
         for first in range(3):
             for second in range(first + 1, 3):

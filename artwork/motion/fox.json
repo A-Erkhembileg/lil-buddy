@@ -222,6 +222,390 @@
       1280,
       400,
       320
+    ],
+    [
+      0,
+      1600,
+      400,
+      320
+    ],
+    [
+      400,
+      1600,
+      400,
+      320
+    ],
+    [
+      800,
+      1600,
+      400,
+      320
+    ],
+    [
+      1200,
+      1600,
+      400,
+      320
+    ],
+    [
+      1600,
+      1600,
+      400,
+      320
+    ],
+    [
+      2000,
+      1600,
+      400,
+      320
+    ],
+    [
+      2400,
+      1600,
+      400,
+      320
+    ],
+    [
+      2800,
+      1600,
+      400,
+      320
+    ],
+    [
+      0,
+      1920,
+      400,
+      320
+    ],
+    [
+      400,
+      1920,
+      400,
+      320
+    ],
+    [
+      800,
+      1920,
+      400,
+      320
+    ],
+    [
+      1200,
+      1920,
+      400,
+      320
+    ],
+    [
+      1600,
+      1920,
+      400,
+      320
+    ],
+    [
+      2000,
+      1920,
+      400,
+      320
+    ],
+    [
+      2400,
+      1920,
+      400,
+      320
+    ],
+    [
+      2800,
+      1920,
+      400,
+      320
+    ],
+    [
+      0,
+      2240,
+      400,
+      320
+    ],
+    [
+      400,
+      2240,
+      400,
+      320
+    ],
+    [
+      800,
+      2240,
+      400,
+      320
+    ],
+    [
+      1200,
+      2240,
+      400,
+      320
+    ],
+    [
+      1600,
+      2240,
+      400,
+      320
+    ],
+    [
+      2000,
+      2240,
+      400,
+      320
+    ],
+    [
+      2400,
+      2240,
+      400,
+      320
+    ],
+    [
+      2800,
+      2240,
+      400,
+      320
+    ],
+    [
+      0,
+      2560,
+      400,
+      320
+    ],
+    [
+      400,
+      2560,
+      400,
+      320
+    ],
+    [
+      800,
+      2560,
+      400,
+      320
+    ],
+    [
+      1200,
+      2560,
+      400,
+      320
+    ],
+    [
+      1600,
+      2560,
+      400,
+      320
+    ],
+    [
+      2000,
+      2560,
+      400,
+      320
+    ],
+    [
+      2400,
+      2560,
+      400,
+      320
+    ],
+    [
+      2800,
+      2560,
+      400,
+      320
+    ],
+    [
+      0,
+      2880,
+      400,
+      320
+    ],
+    [
+      400,
+      2880,
+      400,
+      320
+    ],
+    [
+      800,
+      2880,
+      400,
+      320
+    ],
+    [
+      1200,
+      2880,
+      400,
+      320
+    ],
+    [
+      1600,
+      2880,
+      400,
+      320
+    ],
+    [
+      2000,
+      2880,
+      400,
+      320
+    ],
+    [
+      2400,
+      2880,
+      400,
+      320
+    ],
+    [
+      2800,
+      2880,
+      400,
+      320
+    ],
+    [
+      0,
+      3200,
+      400,
+      320
+    ],
+    [
+      400,
+      3200,
+      400,
+      320
+    ],
+    [
+      800,
+      3200,
+      400,
+      320
+    ],
+    [
+      1200,
+      3200,
+      400,
+      320
+    ],
+    [
+      1600,
+      3200,
+      400,
+      320
+    ],
+    [
+      2000,
+      3200,
+      400,
+      320
+    ],
+    [
+      2400,
+      3200,
+      400,
+      320
+    ],
+    [
+      2800,
+      3200,
+      400,
+      320
+    ],
+    [
+      0,
+      3520,
+      400,
+      320
+    ],
+    [
+      400,
+      3520,
+      400,
+      320
+    ],
+    [
+      800,
+      3520,
+      400,
+      320
+    ],
+    [
+      1200,
+      3520,
+      400,
+      320
+    ],
+    [
+      1600,
+      3520,
+      400,
+      320
+    ],
+    [
+      2000,
+      3520,
+      400,
+      320
+    ],
+    [
+      2400,
+      3520,
+      400,
+      320
+    ],
+    [
+      2800,
+      3520,
+      400,
+      320
+    ],
+    [
+      0,
+      3840,
+      400,
+      320
+    ],
+    [
+      400,
+      3840,
+      400,
+      320
+    ],
+    [
+      800,
+      3840,
+      400,
+      320
+    ],
+    [
+      1200,
+      3840,
+      400,
+      320
+    ],
+    [
+      1600,
+      3840,
+      400,
+      320
+    ],
+    [
+      2000,
+      3840,
+      400,
+      320
+    ],
+    [
+      2400,
+      3840,
+      400,
+      320
+    ],
+    [
+      2800,
+      3840,
+      400,
+      320
     ]
   ],
   "clips": {
@@ -274,6 +658,72 @@
     ],
     "groom": [
       35
+    ],
+    "drawn_walk": [
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97,
+      98,
+      99
     ]
   },
   "sources": {
@@ -290,6 +740,18 @@
         1254,
         1254
       ]
+    },
+    "walk_study": {
+      "file": "artwork/walk-studies/fox-walk.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "grid": [
+        4,
+        4
+      ],
+      "sha256": "6f12e527fb130057f558b1c9bf37ffb63f6fad1abe2695f7c0119b9655115cd2"
     }
   },
   "registration": {
@@ -1380,6 +1842,394 @@
           "canvas_ground_y": 307.029
         }
       ]
+    },
+    "drawn_walk": {
+      "registration": "shared-scale/column-registered-x/actual-lowest-visible-paw-y",
+      "scale": 1.3669064748201438,
+      "column_shift": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "shared_canvas_x": -7,
+      "floor_y": 318,
+      "alpha_threshold": 80,
+      "frames": [
+        {
+          "source_cell": 0,
+          "source_rect": [
+            0,
+            0,
+            314,
+            314
+          ],
+          "source_bounds": [
+            15,
+            83,
+            289,
+            240
+          ],
+          "source_ground_y": 239,
+          "canvas_position": [
+            -7,
+            -9
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 1,
+          "source_rect": [
+            314,
+            0,
+            627,
+            314
+          ],
+          "source_bounds": [
+            13,
+            83,
+            289,
+            240
+          ],
+          "source_ground_y": 239,
+          "canvas_position": [
+            -7,
+            -9
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 2,
+          "source_rect": [
+            627,
+            0,
+            940,
+            314
+          ],
+          "source_bounds": [
+            13,
+            83,
+            290,
+            239
+          ],
+          "source_ground_y": 238,
+          "canvas_position": [
+            -7,
+            -8
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 3,
+          "source_rect": [
+            940,
+            0,
+            1254,
+            314
+          ],
+          "source_bounds": [
+            14,
+            84,
+            290,
+            240
+          ],
+          "source_ground_y": 239,
+          "canvas_position": [
+            -7,
+            -9
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 4,
+          "source_rect": [
+            0,
+            314,
+            314,
+            627
+          ],
+          "source_bounds": [
+            13,
+            83,
+            289,
+            238
+          ],
+          "source_ground_y": 237,
+          "canvas_position": [
+            -7,
+            -7
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 5,
+          "source_rect": [
+            314,
+            314,
+            627,
+            627
+          ],
+          "source_bounds": [
+            13,
+            83,
+            289,
+            238
+          ],
+          "source_ground_y": 237,
+          "canvas_position": [
+            -7,
+            -6
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 6,
+          "source_rect": [
+            627,
+            314,
+            940,
+            627
+          ],
+          "source_bounds": [
+            12,
+            83,
+            289,
+            239
+          ],
+          "source_ground_y": 238,
+          "canvas_position": [
+            -7,
+            -7
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 7,
+          "source_rect": [
+            940,
+            314,
+            1254,
+            627
+          ],
+          "source_bounds": [
+            14,
+            83,
+            290,
+            239
+          ],
+          "source_ground_y": 238,
+          "canvas_position": [
+            -7,
+            -7
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 8,
+          "source_rect": [
+            0,
+            627,
+            314,
+            940
+          ],
+          "source_bounds": [
+            14,
+            83,
+            289,
+            239
+          ],
+          "source_ground_y": 238,
+          "canvas_position": [
+            -7,
+            -8
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 9,
+          "source_rect": [
+            314,
+            627,
+            627,
+            940
+          ],
+          "source_bounds": [
+            14,
+            83,
+            289,
+            239
+          ],
+          "source_ground_y": 238,
+          "canvas_position": [
+            -7,
+            -8
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 10,
+          "source_rect": [
+            627,
+            627,
+            940,
+            940
+          ],
+          "source_bounds": [
+            15,
+            83,
+            290,
+            239
+          ],
+          "source_ground_y": 238,
+          "canvas_position": [
+            -7,
+            -8
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 11,
+          "source_rect": [
+            940,
+            627,
+            1254,
+            940
+          ],
+          "source_bounds": [
+            17,
+            84,
+            290,
+            239
+          ],
+          "source_ground_y": 238,
+          "canvas_position": [
+            -7,
+            -8
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 12,
+          "source_rect": [
+            0,
+            940,
+            314,
+            1254
+          ],
+          "source_bounds": [
+            16,
+            84,
+            289,
+            240
+          ],
+          "source_ground_y": 239,
+          "canvas_position": [
+            -7,
+            -10
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 13,
+          "source_rect": [
+            314,
+            940,
+            627,
+            1254
+          ],
+          "source_bounds": [
+            15,
+            85,
+            289,
+            240
+          ],
+          "source_ground_y": 239,
+          "canvas_position": [
+            -7,
+            -10
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 14,
+          "source_rect": [
+            627,
+            940,
+            940,
+            1254
+          ],
+          "source_bounds": [
+            15,
+            84,
+            289,
+            239
+          ],
+          "source_ground_y": 238,
+          "canvas_position": [
+            -7,
+            -8
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        },
+        {
+          "source_cell": 15,
+          "source_rect": [
+            940,
+            940,
+            1254,
+            1254
+          ],
+          "source_bounds": [
+            16,
+            85,
+            290,
+            240
+          ],
+          "source_ground_y": 239,
+          "canvas_position": [
+            -7,
+            -10
+          ],
+          "canvas_ground_y": 318,
+          "transparent_background": true
+        }
+      ],
+      "key_positions": [
+        0,
+        3,
+        8,
+        11,
+        15,
+        20,
+        24,
+        27,
+        31,
+        36,
+        40,
+        45,
+        49,
+        54,
+        58,
+        61
+      ],
+      "subdivisions": 4,
+      "interpolation": "bidirectional optical flow",
+      "source_key": "walk_study"
     }
   }
 }

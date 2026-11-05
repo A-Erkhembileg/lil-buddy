@@ -53,11 +53,12 @@ Right-click the pet, or use its menu-bar/tray icon:
 - **Animal Type:** Cat, Dog, Fox, or Crow, each with its own animations and quotes.
   Natural Coat preserves the supplied tabby's orange stripes and green eyes,
   the husky's charcoal-and-white coat and blue eyes, and the fox's orange/gold
-  fur, purple eyes, cream bib, and full curved tail. Each has sixteen drawn
-  walking poses, four idle poses, six petting poses, and six airborne poses.
-  Continuous secondary movement uses the 16 ms animation clock between pose
-  changes. Registered body anchors keep swinging tails from shifting the whole
-  sprite, and dragging-to-falling retains the same airborne animation phase.
+  fur, purple eyes, cream bib, and full curved tail. Walking plays whole-body drawings from each animal’s walk study.
+  Each walk has 64 samples over roughly one second. Longer paw swings get
+  more in-between frames, including across the loop boundary. Stride advances with distance travelled at every pet size.
+  The resting, petting, sleeping and habit poses move at the head, chest, paws
+  and tail. Blinking follows its own clock, so breathing continues through a
+  blink. Picking up and releasing a pet keeps its airborne gesture in phase.
 - **Take flight:** available for Crow. Eight wing phases accompany momentum,
   flap-driven lift, air drag, gentle steering, and a controlled descent. A crow
   can also take short spontaneous flights during idle habits. Releasing it
@@ -152,13 +153,20 @@ Each detailed animal has its own transparent 400 by 320 frame atlas and JSON cli
 definitions. Crow retains its 60 by 48 pixel grid. `animal-sprites-atlas.json`
 indexes all four exported animal atlases. The registered runtime assets live in
 `artwork/motion/`; the new authored pose sheets and generation prompts are in
-`artwork/motion-sources/`. The desktop renderer updates on its 16 ms timer;
+`artwork/motion-sources/`. The redrawn walks live in `artwork/walk-studies/`.
+The live renderer articulates limbs from one intact approved standing drawing.
+Stride phase follows distance travelled; supporting soles stay on the fixed floor.
+Pickup settles around a shoulder support, falling prepares the paws for contact,
+and landing locks out decisions until compression, recovery and sitting finish.
+Posture changes use separately registered key-pose clips in `*-transitions.png`;
+the original drawings and walk studies remain available to the artwork tools. The desktop timer runs every 16 ms;
 compact GIF previews are sampled at 25 fps. Preview motion in
 [cat-animations.gif](artwork/cat-animations.gif),
 [dog-animations.gif](artwork/dog-animations.gif), and
 [fox-animations.gif](artwork/fox-animations.gif).
 
 [Watch the full 60 fps motion preview](artwork/fluid-motion-60fps.mp4).
+[Watch the walking and foot-contact check](artwork/walk-contact-60fps.mp4).
 
 The [fox character model](artwork/fox-character-model.png) was created with image
 generation from the supplied visual reference. Its original pixels and detailed
@@ -169,12 +177,42 @@ runtime atlases from the authored sheets, then regenerate the previews with:
 
 ```sh
 ./.venv/bin/python -B tools/bake_motion_atlases.py
+# Only the offline walk importer needs these packages.
+./.venv/bin/python -m pip install numpy opencv-python-headless
+for animal in cat dog fox; do
+    ./.venv/bin/python -B tools/import_walk_study.py --animal "$animal" \
+        --sheet "artwork/walk-studies/$animal-walk.png" --subdivisions 4
+done
 ./.venv/bin/python -B tools/export_sprite_sheet.py
 ```
 
 The optional `tools/render_motion_video.py` exports a 60 fps MP4 using FFmpeg
 (`--ffmpeg /path/to/ffmpeg`, or an installed `imageio-ffmpeg`). This encoder is
 only for creating previews; the app does not include or require it.
+
+The updated comparison uses the original motion showcase as its unchanged
+before panel. Chapter cuts are intentional; the runtime audit contains continuous
+mouse interruptions, floor-marked walks, turns, queued reactions and sleep:
+
+- [Before / after at 60 fps](artwork/lil-buddy-motion-before-after.mp4)
+- [Quarter-speed comparison](artwork/lil-buddy-motion-before-after-slow.mp4)
+- [Continuous app behavior audit](artwork/lil-buddy-motion-runtime-audit.mp4)
+
+Reproduce the updated exports with:
+
+```sh
+# Rebuild posture clips only when source art or registration landmarks change.
+# This offline tool needs numpy and opencv-python-headless; playback does not.
+./.venv/bin/python tools/bake_action_transitions.py
+./.venv/bin/python tools/render_motion_comparison.py --ffmpeg /path/to/ffmpeg
+```
+
+Remaining limits: posture clips interpolate a small set of original 2D drawings;
+texture and silhouette changes can still be noticeable at quarter speed. Turns
+use a brief end-on projection rather than a newly illustrated front view. Crow
+wingbeats retain eight crisp pixel poses. Torso and facial proportions stay
+rigid during the articulated ground and airborne actions; fine ear articulation
+is conservative to retain the approved illustration.
 
 ## Build native apps
 

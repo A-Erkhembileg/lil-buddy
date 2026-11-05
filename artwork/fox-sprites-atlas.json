@@ -41,7 +41,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 1,
@@ -51,7 +51,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 2,
@@ -61,7 +61,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 3,
@@ -71,7 +71,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 4,
@@ -81,7 +81,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 5,
@@ -91,7 +91,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 6,
@@ -101,7 +101,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 7,
@@ -111,7 +111,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 8,
@@ -121,7 +121,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 9,
@@ -131,7 +131,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 10,
@@ -141,7 +141,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 11,
@@ -151,7 +151,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 12,
@@ -161,7 +161,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 13,
@@ -171,7 +171,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 14,
@@ -181,7 +181,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       },
       {
         "frame": 15,
@@ -191,7 +191,7 @@
           400,
           320
         ],
-        "duration_ms": 40
+        "duration_ms": 64
       }
     ],
     "sleep": [

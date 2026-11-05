@@ -1,4 +1,4 @@
-"""Drawn motion clips, continuous secondary movement, and bounded warm rendering."""
+"""Source atlases, continuous motion, and bounded warm rendering."""
 import hashlib
 import json
 import os
@@ -59,7 +59,33 @@ class FluidClipTests(unittest.TestCase):
                     self.assertLessEqual(x + width, atlas.width())
                     self.assertLessEqual(y + height, atlas.height())
 
-    def test_all_sixteen_walk_poses_have_distinct_drawn_artwork(self):
+    def test_live_walk_is_continuous_and_closes_its_loop(self):
+        for animal in ANIMALS:
+            images = [pet.animal_frame_image(animal, "walk", 0, motion_phase=step/64)
+                      for step in range(65)]
+            self.assertEqual(images[0], images[-1])
+            self.assertGreater(len({fingerprint(image) for image in images}), 60)
+            # Whole-body changes between independent sheets are no longer used.
+            areas = []
+            for image in images:
+                rgba = image.convertToFormat(QImage.Format.Format_RGBA8888)
+                raw = rgba.constBits().asstring(rgba.sizeInBytes())
+                areas.append(sum(v > 80 for v in raw[3::4]))
+            self.assertLess(max(areas) / min(areas), 1.16)
+
+    def test_husky_does_not_jump_sideways_at_sheet_row_boundaries(self):
+        from PIL import Image
+        manifest = json.loads((MOTION_ART / "dog.json").read_text())
+        noses = []
+        with Image.open(MOTION_ART / manifest["image"]) as atlas:
+            for position in manifest["registration"]["drawn_walk"]["key_positions"]:
+                index = manifest["clips"]["drawn_walk"][position]
+                x, y, width, height = manifest["frames"][index]
+                alpha = atlas.crop((x, y, x + width, y + height)).getchannel("A")
+                noses.append(alpha.point(lambda v: 255 if v > 80 else 0).getbbox()[2])
+        self.assertLessEqual(max(abs(x - y) for x, y in zip(noses, noses[1:] + noses[:1])), 8)
+
+    def test_archived_sixteen_pose_source_clip_remains_available_to_art_tools(self):
         for animal in ANIMALS:
             with self.subTest(animal=animal):
                 bases, clips = pet._sprite_bases(animal)
@@ -128,39 +154,77 @@ class FluidPlaybackTests(unittest.TestCase):
         self.cat._last_time = 100.0
         self.cat._set_frame()
 
-    def test_sixty_hz_walk_uses_all_drawn_poses_and_moves_on_most_ticks(self):
+    def test_sixty_hz_walk_covers_the_stride_and_moves_on_most_ticks(self):
         for animal in ANIMALS:
             with self.subTest(animal=animal):
                 self.start_walking(animal)
                 frames, changes = set(), 0
                 previous = fingerprint(self.cat._pixmap.toImage())
-                for tick in range(1, 61):
+                for tick in range(1, 73):
                     self.cat._tick(now=100.0 + tick / 60)
                     frames.add(self.cat._frame_key[1])
                     current = fingerprint(self.cat._pixmap.toImage())
                     changes += current != previous
                     previous = current
                 self.assertEqual(frames, set(range(16)))
-                self.assertGreater(changes, 36, "Art still holds for several 16 ms updates.")
+                self.assertGreater(changes, 55, "Art still holds for several 16 ms updates.")
 
-    def test_releasing_a_drag_keeps_the_airborne_animation_phase(self):
+    def test_releasing_a_drag_changes_to_contact_preparation(self):
         for animal in ANIMALS:
             with self.subTest(animal=animal):
-                self.cat.motion.state = "held"
-                self.cat.motion.vy = self.cat._drag_speed = 500.0
-                self.cat._animation_time += 1.0
                 self.cat.set_animal_type(animal)
                 self.cat.timer.stop()
+                self.cat.motion.state = "held"
+                self.cat.motion.y = self.cat.motion.bounds(self.area)[3]-150
+                self.cat._pose_clock_kind = None
                 self.cat._set_frame()
-                self.cat._animation_time += 0.12
+                self.cat._animation_time += 0.6
                 self.cat._set_frame()
-                before_frame = self.cat._frame_key[1]
-                before_image = self.cat._pixmap.toImage()
-                self.assertGreater(before_frame, 0)
-                self.cat.motion.state = "fall"
+                held = self.cat._pixmap.toImage()
+                self.assertEqual(self.cat._frame_key[-2], 1.0)
+                self.cat.motion.state, self.cat.motion.vy = "fall", 500
                 self.cat._set_frame()
-                self.assertEqual(self.cat._frame_key[1], before_frame)
-                self.assertEqual(self.cat._pixmap.toImage(), before_image)
+                self.cat._animation_time += 0.31
+                self.cat._set_frame()
+                self.assertEqual(self.cat._frame_key[-2], 1.0)
+                self.assertNotEqual(self.cat._pixmap.toImage(), held)
+
+    def test_blink_tracks_eyelids_without_restarting_the_idle_clock(self):
+        self.cat.motion.state, self.cat.motion.sleeping = "rest", False
+        self.cat._animation_time = 4.0
+        self.cat._pose_clock_kind = None
+        self.cat._set_frame()
+        self.cat._animation_time += 0.6
+        self.cat._blink_left = pet.BLINK_SECONDS / 2
+        self.cat._set_frame()
+        self.assertEqual(self.cat._frame_key[0], "blink")
+        self.assertAlmostEqual(self.cat._frame_key[-2], 0.5)
+        self.assertAlmostEqual(self.cat._frame_key[3], 0.6 / pet.ASSET_ANIMATION_SECONDS["idle"])
+        self.cat._blink_left = 0
+        self.cat._set_frame()
+        self.assertAlmostEqual(self.cat._frame_key[-2], 0.6 / pet.ASSET_ANIMATION_SECONDS["idle"])
+
+    def test_one_shot_actions_use_their_full_duration(self):
+        self.cat.motion.state, self.cat.motion.sleeping = "rest", False
+        for habit in ("yawn", "stretch"):
+            self.cat._habit = habit
+            for fraction in (0.2, 0.5, 0.9):
+                self.cat._habit_elapsed = fraction * pet.HABIT_DURATIONS[habit]
+                self.cat._set_frame()
+                self.assertAlmostEqual(self.cat._frame_key[-2], fraction)
+        self.cat._landing_elapsed = pet.LAND_FRAME_SECONDS / 2
+        self.cat._set_frame()
+        self.assertAlmostEqual(self.cat._frame_key[-2], pet.LAND_FRAME_SECONDS / 2 / self.cat.motion.landing_duration)
+
+    def test_retina_render_keeps_the_hit_region_in_window_coordinates(self):
+        self.start_walking("Fox")
+        mask = self.cat.mask()
+        with patch.object(self.cat, "devicePixelRatioF", return_value=2.0):
+            self.cat._set_frame()
+        self.assertEqual(self.cat._pixmap.width(), 2 * self.cat.width())
+        self.assertEqual(self.cat._pixmap.deviceIndependentSize().toSize(), self.cat.size())
+        self.assertTrue(self.cat.rect().contains(self.cat.mask().boundingRect()))
+        self.assertLessEqual(abs(mask.boundingRect().width()-self.cat.mask().boundingRect().width()), 2)
 
     def test_pause_and_fullscreen_latch_freeze_visual_time(self):
         self.start_walking("Fox")

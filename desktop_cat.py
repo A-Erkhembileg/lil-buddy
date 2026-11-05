@@ -8,12 +8,14 @@ Python 3.10+. Install dependencies with the same Python used to run this file:
     python3 desktop_cat.py
 
 Click to pet, or drag with the left mouse button; release to drop. Right-click or Control-click
-for roaming, reset, and quit. All artwork is drawn here, with no asset files.
+for roaming, reset, and quit. Detailed artwork is included in artwork/motion;
+the crow and interface graphics are drawn in code.
 macOS can still place secure/system surfaces above ordinary application windows.
 """
 from __future__ import annotations
 
 import ctypes
+import functools
 import ctypes.util
 import os
 import argparse
@@ -32,7 +34,7 @@ try:
     from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, QSettings, QStandardPaths, QSignalBlocker
     from PyQt6.QtGui import (
         QColor, QCursor, QGuiApplication, QIcon, QImage, QMouseEvent, QPainter, QPixmap,
-        QActionGroup, QPolygon, QRegion, QTransform,
+        QActionGroup, QPolygon, QPolygonF, QRegion, QTransform, QPainterPath,
     )
     from PyQt6.QtWidgets import QApplication, QColorDialog, QMenu, QSystemTrayIcon, QWidget
 except ImportError as exc:
@@ -62,6 +64,7 @@ BUBBLE_SECONDS = 3.0
 PETTED = "petted"
 AIR_FRAME_SECONDS = 0.065
 CROW_FLAP_SECONDS = 0.055
+BLINK_SECONDS = 0.16
 LAND_FRAME_SECONDS = 0.06
 HARD_LANDING_SPEED = 420.0
 SIZES = {"Small": 2, "Medium": 3, "Large": 4}
@@ -459,6 +462,16 @@ class Motion:
     flight_duration: float = 0.0
     flight_target_y: float = 0.0
     flight_start_y: float = 0.0
+    walk_speed: float = WALK_SPEED
+    transition_time: float = 0.0
+    transition_duration: float = 0.56
+    landing_duration: float = 0.68
+    turn_duration: float = 0.48
+    turn_target: int = 1
+    turn_from: int = 1
+    turn_resume: str = "walk"
+    impact_speed: float = 0.0
+    sleep_after_sit: bool = False
 
     @staticmethod
     def limits(area: QRectF, width: float = WIDTH, height: float = HEIGHT) -> tuple[float, float, float, float]:
@@ -479,14 +492,71 @@ class Motion:
 
     def rest(self, rng: random.Random) -> None:
         self.state, self.vy = "rest", 0.0
-        self.vx = 0.0
-        self.sleeping = self.roaming and rng.random() < 0.22
+        self.vx, self.transition_time = 0.0, 0.0
+        self.sleeping = False
         self.decision_in = rng.uniform(3.0, 7.0)
+
+    def begin_turn(self, direction: int, resume: str = "walk") -> None:
+        """Stop travelling while the paws reposition under the turning body."""
+        self.turn_from, self.turn_target = self.direction, direction
+        self.turn_resume = resume
+        self.state, self.transition_time = "turn", 0.0
+        self.sleeping, self.vx, self.sleep_after_sit = False, 0.0, False
+
+    def begin_rest(self, rng: random.Random) -> None:
+        self.sleep_after_sit = self.roaming and rng.random() < 0.22
+        self.sleeping, self.vx = False, 0.0
+        self.transition_time = 0.0
+        if self.state in ("walk", "turn", "stand"):
+            self.state = "sit"
+        elif self.sleep_after_sit:
+            self.state = "settle"
+        else:
+            self.rest(rng)
+
+    def begin_landing(self, speed: float) -> None:
+        """Absorb the impact through the legs instead of bouncing the window."""
+        self.state, self.transition_time = "land", 0.0
+        self.impact_speed = max(0.0, speed)
+        self.vy, self.vx, self.sleeping = 0.0, 0.0, False
+
+    def _ground_transition(self, dt: float, rng: random.Random) -> None:
+        self.transition_time += dt
+        if self.state == "turn":
+            if self.transition_time >= self.turn_duration * 0.5:
+                self.direction = self.turn_target
+            if self.transition_time >= self.turn_duration:
+                self.state, self.transition_time = self.turn_resume, 0.0
+            return
+        duration = self.landing_duration if self.state == "land" else self.transition_duration
+        if self.transition_time < duration:
+            return
+        previous = self.state
+        self.transition_time = 0.0
+        if previous == "stand":
+            self.state = "walk" if self.roaming else "sit"
+            if self.roaming and self.turn_target != self.direction:
+                self.begin_turn(self.turn_target)
+        elif previous == "sit" and self.sleep_after_sit:
+            self.state = "settle"
+        elif previous == "settle":
+            self.rest(rng)
+            self.sleeping = True
+        elif previous == "wake":
+            if self.turn_resume == "rest":
+                self.rest(rng)
+            else:
+                self.state = self.turn_resume
+        elif previous == "land":
+            self.state, self.sleep_after_sit = "sit", False
+            self.decision_in = max(self.decision_in, 2.0)
+        else:
+            self.rest(rng)
 
     def drop(self, area: QRectF) -> None:
         self.constrain(area)
         self.state, self.vy, self.sleeping = "fall", 0.0, False
-        self.vx = 0.0
+        self.vx, self.transition_time = 0.0, 0.0
 
     def begin_flight(self, area: QRectF, rng: random.Random) -> None:
         """Begin a short flap-driven excursion without teleporting the pet."""
@@ -497,6 +567,7 @@ class Motion:
         self.flight_start_y = self.y
         self.flight_target_y = max(top, floor - min(210.0, area.height() * 0.28))
         self.vx, self.vy = self.direction * 58.0, -55.0
+        self.turn_target = self.direction
 
     def _flight_step(self, dt: float, area: QRectF, rng: random.Random) -> float:
         left, right, top, floor = self.bounds(area)
@@ -519,10 +590,14 @@ class Motion:
         self.vy = min(160.0, max(-160.0, self.vy))
         margin = min(28.0, max(0.0, (right - left) * 0.15))
         if self.x <= left + margin:
-            self.direction = 1
+            self.turn_target = 1
         elif self.x >= right - margin:
-            self.direction = -1
-        self.vx += (self.direction * 72.0 - self.vx) * min(1.0, 3.2 * dt)
+            self.turn_target = -1
+        self.vx += (self.turn_target * 72.0 - self.vx) * min(1.0, 3.2 * dt)
+        # The bird changes facing after braking through the turn, so it never
+        # mirrors while still travelling quickly in the original direction.
+        if abs(self.vx) > 6.0:
+            self.direction = 1 if self.vx > 0 else -1
         self.x += self.vx * dt
         self.y += self.vy * dt
         if self.x < left or self.x > right:
@@ -535,15 +610,14 @@ class Motion:
                 and self.y >= floor - 3.0 and self.vy >= -15.0):
             impact = max(0.0, self.vy)
             self.y = floor
-            self.rest(rng)
-            self.sleeping = False
+            self.begin_landing(impact)
             return impact
         self.y = min(floor, self.y)
         return 0.0
 
     def step(self, dt: float, area: QRectF, rng: random.Random,
              autonomous: bool = True) -> float:
-        """Advance physics and report the pre-bounce speed of any floor impact."""
+        """Advance physics and report the incoming speed of each floor impact."""
         if self.state in ("held", "latched"):
             return 0.0
         left, right, top, floor = self.bounds(area)
@@ -557,28 +631,38 @@ class Motion:
             if self.y >= floor:
                 self.y = floor
                 impact_speed = max(0.0, self.vy)
-                if self.vy > BOUNCE_CUTOFF:
-                    self.vy = -self.vy * BOUNCE
-                else:
-                    self.rest(rng)
+                self.begin_landing(impact_speed)
             self.y = max(top, self.y)
             return impact_speed
         self.y = floor
+        if self.state in ("land", "turn", "stand", "sit", "settle", "wake"):
+            self._ground_transition(dt, rng)
+            return 0.0
         if self.state == "walk":
-            self.x += self.direction * WALK_SPEED * dt
+            self.x += self.direction * self.walk_speed * dt
             if self.x <= left:
-                self.x, self.direction = left, 1
+                self.x = left
+                self.begin_turn(1)
             elif self.x >= right:
-                self.x, self.direction = right, -1
+                self.x = right
+                self.begin_turn(-1)
+            if self.state == "turn":
+                return 0.0
         if self.state == PETTED or not self.roaming or not autonomous:
             return 0.0
         self.decision_in -= dt
         if self.decision_in <= 0.0:
             if self.state == "walk" or rng.random() < 0.45:
-                self.rest(rng)
+                if self.sleeping:
+                    self.state, self.turn_resume = "wake", "rest"
+                    self.sleeping, self.transition_time = False, 0.0
+                else:
+                    self.begin_rest(rng)
             else:
-                self.state, self.sleeping = "walk", False
-                self.direction = rng.choice((-1, 1))
+                self.turn_target = rng.choice((-1, 1))
+                self.turn_resume = "stand"
+                self.state = "wake" if self.sleeping else "stand"
+                self.sleeping, self.transition_time = False, 0.0
                 self.decision_in = rng.uniform(2.0, 5.0)
         return 0.0
 
@@ -1220,43 +1304,74 @@ def draw_fox(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
     return _asset_pixmap("Fox",pose,frame,direction,tail_offset,breath,dangle,
                          palette,stretch,True,target_size,motion_phase)
 
-_CROW_WINGS = (
-    [(31,26),(25,18),(23,9),(19,1),(17,2),(18,8),(14,4),(12,5),(15,12),(10,8),(8,10),(16,22),(24,29)],
-    [(31,26),(24,18),(19,11),(11,5),(9,6),(13,12),(7,9),(5,11),(10,17),(4,14),(3,17),(16,26),(25,29)],
-    [(32,26),(23,20),(15,17),(5,15),(2,16),(8,19),(1,19),(1,21),(9,23),(3,24),(5,26),(17,28),(27,29)],
-    [(32,25),(24,24),(17,27),(7,30),(5,33),(12,32),(7,36),(9,38),(16,34),(13,40),(16,41),(24,33),(29,29)],
-    [(32,24),(26,26),(21,32),(14,43),(15,46),(19,40),(18,47),(21,47),(24,40),(24,46),(27,44),(30,34),(33,28)],
-    [(32,25),(28,27),(25,32),(20,39),(21,42),(24,37),(24,43),(27,42),(28,36),(30,39),(32,35),(33,28)],
-    [(31,26),(25,23),(19,22),(10,23),(8,21),(15,19),(9,18),(10,16),(18,18),(15,13),(17,12),(25,20),(32,24)],
-    [(31,26),(27,20),(25,13),(22,6),(19,5),(20,12),(16,8),(14,9),(18,16),(12,13),(11,15),(20,25),(27,29)],
+# The shoulder, elbow and wrist lead the primary fan in sequence. The first
+# three samples are the powered downstroke; the folded recovery takes five.
+_CROW_WING_ANGLES = (
+    (-125,-100,-145), (-177,-177,-179), (-238,-200,-225),
+    (-220,-180,-207), (-175,-192,-207), (-151,-130,-145),
+    (-139,-110,-140), (-130,-100,-145),
 )
 
 
-def _crow_wing(g, frame, colors, far=False):
-    points=_CROW_WINGS[frame%8]
-    if far:points=[(min(59,x+4),max(1,y-1)) for x,y in points]
-    g.poly(points, colors["ink"])
-    # The second surface follows the elbow and wrist, preserving individual primaries.
-    root=(points[0][0]-1,points[0][1])
-    elbow=(points[2][0]+1,points[2][1]+1)
-    wrist=(points[3][0]+2,points[3][1]+1)
-    g.poly([root,(points[1][0]+1,points[1][1]+1),elbow,wrist,
-            (points[-2][0],points[-2][1]),(points[-1][0],points[-1][1]-1)],
+def _crow_wing_points(frame, fold=0.0):
+    upper,lower,fan = _CROW_WING_ANGLES[int(frame)%8]
+    upper+=( -205-upper)*fold
+    lower+=( -26-lower)*fold
+    fan+=( -202-fan)*fold
+    def point(origin,length,angle):
+        angle=math.radians(angle)
+        return origin[0]+length*math.cos(angle),origin[1]+length*math.sin(angle)
+    shoulder=(31.0,26.0)
+    elbow=point(shoulder,10.5,upper)
+    wrist=point(elbow,10.0,lower)
+    angle=math.radians(fan)
+    ux,uy=math.cos(angle),math.sin(angle)
+    nx,ny=-uy,ux
+    def primary(length,width):
+        return wrist[0]+length*ux+width*nx,wrist[1]+length*uy+width*ny
+    # Broad coverts taper into three separate primary tips. Their lengths are
+    # fixed; recovery folds at the elbow/wrist rather than shrinking the wing.
+    points=[shoulder,(elbow[0]+2*nx,elbow[1]+2*ny),
+            (wrist[0]+3*nx,wrist[1]+3*ny),primary(9,3),primary(10,1),
+            primary(5,0),primary(10,-1),primary(10,-3),primary(4,-3),
+            primary(8,-5),primary(7,-7),(wrist[0]-5*nx,wrist[1]-5*ny),
+            (elbow[0]-4*nx,elbow[1]-4*ny),(shoulder[0]-3,shoulder[1]+3)]
+    return [(round(max(1,min(58,x))),round(max(1,min(46,y)))) for x,y in points],shoulder,elbow,wrist
+
+
+def _crow_wing(g, frame, colors, far=False, fold=0.0):
+    points,root,elbow,wrist=_crow_wing_points(frame,fold)
+    dx,dy=(4,-1) if far else (0,0)
+    points=[(min(59,x+dx),max(1,y+dy)) for x,y in points]
+    root,elbow,wrist=[(round(x+dx),round(y+dy)) for x,y in (root,elbow,wrist)]
+    g.poly(points,colors["ink"])
+    g.poly([root,elbow,wrist,points[-3],points[-2],points[-1]],
            colors["shade"] if far else colors["fur"])
     g.line([root,elbow,wrist],colors["cream"] if far else colors["highlight"])
-    g.line([(root[0]-2,root[1]+1),(elbow[0]-1,elbow[1]+2)],colors["shade"])
+    g.line([(root[0]-2,root[1]+1),(elbow[0]-1,elbow[1]+1)],colors["shade"])
 
 
 def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
-              palette=None, stretch=0) -> QPixmap:
-    """A black corvid: heavy pointed beak, layered feathers, long tail and eight wing strokes."""
-    if pose=="land":return _natural_landing(draw_crow,frame,direction,palette)
+              palette=None, stretch=0, motion_phase=None) -> QPixmap:
+    """Articulated corvid movement drawn directly on its original pixel grid."""
     c,g=_natural_colors("Crow",palette),_NaturalGrid()
-    flying=pose in ("fly","held","fall")
-    phase=frame%8 if flying else frame%4
+    phase=int(frame)%8 if pose in ("fly","held","fall") else int(frame)%4
+    progress=max(0.0,min(1.0,motion_phase)) if motion_phase is not None else min(1.0,frame/3)
+    def ease(t):
+        t=max(0.0,min(1.0,t))
+        return t*t*(3-2*t)
+    # Anticipation / reach / quiet hold / recovery, shared by intentional acts.
+    gesture=ease(progress/0.3)*(1-ease((progress-0.68)/0.32))
     happy=pose in ("petted","pet")
-    bob=(0,-1,0,1)[phase] if pose=="walk" else breath
-    if happy:bob+=(0,-1,0,1)[phase]
+    flying=pose=="fly"
+    falling=pose=="fall"
+    held=pose=="held"
+    landing=pose=="land"
+    if landing and motion_phase is None:
+        progress=(0.22,0.62,1.0)[min(2,int(frame))]
+    compression=(3*ease(progress/0.18)*(1-ease((progress-0.18)/0.65))) if landing else 0
+    bob=(0,-1,0,1)[phase%4] if pose=="walk" else breath
+    if happy:bob+=(0,-1,0,1)[phase%4]
     if pose=="sleep":
         g.poly([(9,38),(17,31),(27,28),(38,30),(44,36),(43,43),(37,47),(18,47)],c["ink"])
         g.poly([(13,38),(19,32),(28,29),(37,31),(42,36),(41,42),(36,45),(20,46)],c["fur"])
@@ -1264,25 +1379,35 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
         g.line([(22,35),(29,35),(35,38),(31,42)],c["highlight"])
         g.box(33,32,4,1,c["light"])
         return g.finish(direction)
-    if flying:
-        _crow_wing(g,phase,c,True)
-        body_y=0
-    else:body_y=bob
-    # Long, graduated tail feathers give a corvid silhouette rather than a round songbird.
-    g.poly([(24,31+body_y),(17,31+body_y),(6,35+body_y),(4,38+body_y),
-            (8,39+body_y),(10,37+body_y),(10,40+body_y),(14,39+body_y),(23,35+body_y)],c["ink"])
-    g.poly([(22,32+body_y),(16,33+body_y),(7,36+body_y),(7,37+body_y),(14,36+body_y),
-            (13,38+body_y),(20,35+body_y)],c["shade"])
-    g.line([(17,33+body_y),(9,37+body_y)],c["highlight"])
+    body_y=round(compression) if landing else round(math.sin(math.pi*progress)) if pose=="turn" else 2 if held else 0 if flying or falling else bob
+    wing_frame=phase if flying else (5,5,4,4,5,5,6,5)[phase] if falling else 4
+    open_wing=flying or falling or (landing and progress<0.78)
+    fold=ease((progress-0.04)/0.66) if landing else 0.0
+    if landing:wing_frame=4
+    # Pitch is a small rigid adjustment of body parts, never a face warp.
+    pitch=max(-1,min(1,int(dangle))) if flying else 0
+    if open_wing:
+        g.p.save();g.p.translate(0,body_y)
+        _crow_wing(g,wing_frame,c,True,fold)
+        g.p.restore()
+    tail_y=body_y-pitch
+    if held:tail_y+=(0,0,1,1,1,0,0,0)[phase]
+    # Original tail, coat polygons, markings and face retain their dimensions.
+    g.poly([(24,31+tail_y),(17,31+tail_y),(6,35+tail_y),(4,38+tail_y),
+            (8,39+tail_y),(10,37+tail_y),(10,40+tail_y),(14,39+tail_y),(23,35+tail_y)],c["ink"])
+    g.poly([(22,32+tail_y),(16,33+tail_y),(7,36+tail_y),(7,37+tail_y),(14,36+tail_y),
+            (13,38+tail_y),(20,35+tail_y)],c["shade"])
+    g.line([(17,33+tail_y),(9,37+tail_y)],c["highlight"])
     g.poly([(18,27+body_y),(24,22+body_y),(33,20+body_y),(40,23+body_y),
             (42,28+body_y),(38,35+body_y),(31,39+body_y),(23,37+body_y),(18,33+body_y)],c["ink"])
     g.poly([(20,27+body_y),(25,23+body_y),(33,21+body_y),(39,24+body_y),
             (40,28+body_y),(37,34+body_y),(31,37+body_y),(24,36+body_y),(20,32+body_y)],c["fur"])
     g.poly([(25,34+body_y),(31,35+body_y),(37,31+body_y),(35,36+body_y),(30,38+body_y)],c["shade"])
-    if flying:
-        _crow_wing(g,phase,c)
+    if open_wing:
+        g.p.save();g.p.translate(0,body_y)
+        _crow_wing(g,wing_frame,c,fold=fold)
+        g.p.restore()
     else:
-        # Folded scapulars and primary tips overlap in three clear feather groups.
         g.poly([(22,27+body_y),(29,23+body_y),(35,25+body_y),(37,29+body_y),
                 (32,35+body_y),(25,37+body_y),(21,34+body_y)],c["ink"])
         g.poly([(23,27+body_y),(29,24+body_y),(34,26+body_y),(35,29+body_y),
@@ -1291,29 +1416,66 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
         g.line([(24,30+body_y),(29,30+body_y),(33,28+body_y)],c["cream"])
         g.line([(25,33+body_y),(30,32+body_y)],c["highlight"])
         if pose in ("groom","preen","stretch"):
-            spread=(0,2,4,1)[phase]
-            g.poly([(27,27),(18,20-spread),(12,20-spread),(15,25),(23,34),(30,33)],c["ink"])
-            g.poly([(26,28),(18,22-spread),(15,22-spread),(23,32),(29,32)],c["highlight"])
-    # Toes bend naturally beneath the belly; flight tucks them back.
+            spread=round(5*gesture)
+            g.poly([(27,27),(18,23-spread),(12,23-spread),(15,28),(23,34),(30,33)],c["ink"])
+            g.poly([(26,28),(18,25-spread),(15,25-spread),(23,32),(29,32)],c["highlight"])
+    turn_toes=[]
     if flying:
-        for x,shift in ((29,phase%2),(35,(phase+1)%2)):
-            g.line([(x,36),(x-2,39),(x+1,40+shift)],c["ink"])
-            g.line([(x+1,40+shift),(x+4,40+shift),(x+3,41+shift)],c["shade"])
+        # Toes remain tucked throughout cruise; no frantic alternating pedal.
+        for x in (29,35):
+            if dangle>0:
+                g.line([(x,36),(x-2,40),(x+1,44)],c["ink"])
+                g.line([(x-2,45),(x+1,44),(x+5,45)],c["shade"])
+            else:
+                g.line([(x,36),(x-2,39),(x+1,40)],c["ink"])
+                g.line([(x+1,40),(x+4,40),(x+3,41)],c["shade"])
+    elif held:
+        # Shoulder support is stable while the relaxed feet hang under the body.
+        for index,x in enumerate((29,36)):
+            delay=(0,1,1,0,-1,-1,0,0)[(phase+index)%8]
+            g.line([(x,38),(x-1,42),(x+delay,46)],c["ink"])
+            g.line([(x+delay,46),(x+3+delay,47)],c["shade"])
     else:
         for index,x in enumerate((29,36)):
-            if pose=="walk":x+=((-1,1),(0,0),(1,-1),(0,0))[phase][index]
-            lift=2 if pose=="walk" and phase%2==index else 0
-            g.line([(x,36+bob),(x-1,41),(x+1,46-lift)],c["ink"])
-            g.box(x,45-lift,2,2,c["shade"])
-            g.line([(x+1,46-lift),(x+6,47-lift)],c["ink"])
-            g.line([(x+1,46-lift),(x-3,47-lift)],c["ink"])
-            g.box(x+5,47-lift,2,1,c["ink"])
-            g.box(x-3,47-lift,1,1,c["ink"])
-    # The head and beak maintain a stable pivot through the wing cycle.
-    hx=-3 if pose in ("groom","preen") else (0,1,0,-1)[phase%4] if happy else 0
-    hy=5 if pose in ("groom","preen") else (0 if flying else bob)
+            hip_x=x
+            lift=0
+            if pose=="walk":
+                # A stance moves backwards at the exact speed of the window.
+                walk_phase=(motion_phase if motion_phase is not None else phase/4)+index*0.5
+                stride=8.112  # 48 logical px/s * .52 s * .65 stance / two px per art pixel
+                local=walk_phase%1
+                if local<0.65:x+=round(stride*(0.5-local/0.65))
+                else:
+                    swing=(local-0.65)/0.35
+                    x+=round(stride*(ease(swing)-0.5))
+                    lift=round(3*math.sin(math.pi*swing))
+            if pose=="turn":
+                # Step around the other planted foot, then exchange support.
+                start=0.08 if index==0 else 0.54
+                step=max(0.0,min(1.0,(progress-start)/0.36))
+                arc=math.sin(math.pi*step)
+                lift=round(2*arc)
+                x+=round((2 if index==0 else -2)*arc*arc)
+            foot_y=47-lift
+            if pose=="turn":turn_toes.append((x+5,foot_y))
+            # Falling opens toes before contact, in contrast to tucked flight.
+            if falling:foot_y=43+min(3,int(stretch))+((0,0),(0,1),(1,1),(1,0))[phase%4][index]
+            root=(hip_x,36+body_y)
+            ankle=(x+1,foot_y-1)
+            knee=_solve_leg(root,ankle,5.8,6.0,1)
+            g.line([root,knee,ankle],c["ink"])
+            g.box(x,foot_y-2,2,2,c["shade"])
+            g.line([(x+1,foot_y-1),(x+6,foot_y)],c["ink"])
+            g.line([(x+1,foot_y-1),(x-3,foot_y)],c["ink"])
+            g.box(x+5,foot_y,2,1,c["ink"])
+            g.box(x-3,foot_y,1,1,c["ink"])
+    hx=-round(gesture) if pose in ("groom","preen") else (0,1,0,-1)[phase%4] if happy else 0
+    hy=-round(4*gesture) if pose in ("groom","preen") else body_y+pitch
+    if pose=="yawn":hy-=round(2*gesture)
     if pose=="watch":hy+=max(-1,min(1,dangle))
     g.p.save();g.p.translate(hx,hy)
+    if pose in ("groom","preen"):
+        g.p.translate(40,24);g.p.rotate(round(130*gesture));g.p.translate(-40,-24)
     g.poly([(34,24),(36,18),(40,14),(45,14),(49,17),(50,20),(55,22),
             (59,25),(59,26),(51,27),(47,28),(43,30),(37,28)],c["ink"])
     g.poly([(36,24),(38,19),(41,15),(45,15),(48,18),(49,21),(53,23),
@@ -1322,17 +1484,31 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
     g.line([(50,23),(56,25)],c["highlight"])
     g.line([(39,18),(43,16),(46,17)],c["highlight"])
     g.line([(38,24),(41,26),(44,27)],c["cream"])
-    if pose in ("blink","petted","pet","groom","preen"):
+    if pose in ("blink","petted","pet","groom","preen") or (pose=="yawn" and gesture>0.35):
         g.line([(44,20),(47,20)],c["light"])
     else:
         g.box(45,19+max(-1,min(1,dangle)),2,2,c["eye"])
         g.box(46,19+max(-1,min(1,dangle)),1,1,c["glint"])
     if pose=="yawn":
-        gap=(1,2,3,1)[phase]
+        gap=max(0,round(5*gesture))
         g.poly([(50,25),(58,26),(51,26+gap),(48,26+gap)],c["ink"])
-        g.box(50,26,3,gap,c["pink"])
+        if gap:g.box(50,26,3,gap,c["pink"])
     g.p.restore()
     if happy:g.heart(12+phase,11-phase);g.heart(51,6+phase%2)
+    if pose=="turn":
+        # The short turn projects toward an end-on view before facing changes.
+        # Sample on the original integer grid: no blur, fading or double limbs.
+        source=g.image.copy()
+        g.p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        g.p.fillRect(g.image.rect(),Qt.GlobalColor.transparent)
+        g.p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        width=1.0-0.76*math.sin(math.pi*progress)**2
+        g.p.translate(30,0);g.p.scale(width,1);g.p.translate(-30,0)
+        g.p.drawImage(0,0,source)
+        g.p.resetTransform()
+        # A claw stays at least one native pixel wide in the end-on view.
+        for toe_x,toe_y in turn_toes:
+            g.box(round(30+(toe_x-30)*width),toe_y,1,1,c["ink"])
     return g.finish(direction)
 
 
@@ -1552,8 +1728,8 @@ def _legacy_sprite_bases(animal):
 
 _MOTION_BASES = {}
 ASSET_ANIMATION_SECONDS = {
-    "idle": 2.4, "walk": 0.64, "pet": 0.48, "air": 0.30,
-    "sleep": 3.6, "groom": 1.2, "yawn": 1.2, "stretch": 1.2, "watch": 2.4,
+    "idle": 3.0, "pet": 1.28, "air": 0.72,
+    "sleep": 3.6, "groom": 1.0, "watch": HABIT_DURATIONS["watch"],
 }
 
 
@@ -1597,6 +1773,21 @@ def _sprite_bases(animal):
         if (not isinstance(name, str) or not isinstance(indices, list) or not indices
                 or any(not isinstance(index, int) or not 0 <= index < len(frames) for index in indices)):
             raise RuntimeError(f"Invalid motion clip in {manifest_path}")
+    # Short registered key-pose inbetweens are ordinary shipped PNGs. OpenCV
+    # is used only by the offline authoring tool, never the desktop app.
+    transition_file = directory / (animal.lower()+"-transitions.json")
+    if transition_file.is_file():
+        transitions = json.loads(transition_file.read_text(encoding="utf-8"))
+        transition_atlas = QImage(str(directory / (animal.lower()+"-transitions.png")))
+        if transition_atlas.isNull() or transitions.get("cell_size") != list(SPRITE_CANVAS):
+            raise RuntimeError(f"Invalid transition artwork: {transition_file}")
+        offset = len(frames)
+        count = max(index for indices in transitions["clips"].values() for index in indices)+1
+        columns = transitions["columns"]
+        for index in range(count):
+            frames.append(transition_atlas.copy(index%columns*400,index//columns*320,400,320))
+        for name,indices in transitions["clips"].items():
+            clips["transition_"+name] = [offset+index for index in indices]
     _MOTION_BASES[animal] = frames, clips
     return _MOTION_BASES[animal]
 
@@ -1607,165 +1798,676 @@ def _sprite_tinted(animal, index, palette):
         return bases[index]
     key = animal, index, palette
     if key not in _SPRITE_TINTS:
-        import colorsys
+        # Walking now displays a different full drawing on most ticks. Build the
+        # coat mask with native image operations so a first lap in a new colour
+        # fits the same frame budget as subsequent, cached laps.
+        from PIL import Image, ImageChops
         image = bases[index].convertToFormat(QImage.Format.Format_RGBA8888)
-        raw = bytearray(image.constBits().asstring(image.sizeInBytes()))
+        size = image.width(), image.height()
+        source = Image.frombytes("RGBA", size, image.constBits().asstring(image.sizeInBytes()))
+        red, green, blue, alpha = source.split()
+        bright = ImageChops.lighter(red, ImageChops.lighter(green, blue))
+        green_limit = green.point([min(255, int(v * 1.08)) for v in range(256)])
+        blue_limit = blue.point([min(255, int(v * 1.35)) for v in range(256)])
+        orange = ImageChops.subtract(red, ImageChops.lighter(green_limit, blue_limit))
+        orange = ImageChops.darker(orange.point(lambda v: 255 if v else 0),
+                                   red.point(lambda v: 255 if v > 95 else 0))
         target = QColor(palette.fur)
-        hue, saturation, value, _alpha = target.getHsvF()
-        hue = max(0.0,hue)
-        colors = {}
-        for i in range(0,len(raw),4):
-            if not raw[i+3]:
-                continue
-            red, green, blue = raw[i:i+3]
-            orange = red > green*1.08 and red > blue*1.35 and red > 95
-            dark_husky = animal == "Dog" and 35 < max(red,green,blue) < 155 and max(red,green,blue)-min(red,green,blue) < 48
-            if not (orange or dark_husky):
-                continue
-            color_key = red//8, green//8, blue//8
-            if color_key not in colors:
-                original_value = max(red,green,blue)/255
-                ratio = (0.55+original_value*0.55) if orange else (0.65+original_value*0.9)
+        def apply_coat(mask, base, scale):
+            shades = []
+            for value in range(256):
+                ratio = base + scale * value / 255
                 if 0.91 <= ratio <= 1.05:
-                    rgb = target.red(),target.green(),target.blue()
-                else:
-                    rgb = tuple(round(v*255) for v in colorsys.hsv_to_rgb(hue,saturation,min(1,value*ratio)))
-                colors[color_key] = bytes(rgb)
-            raw[i:i+3] = colors[color_key]
-        tinted = QImage(bytes(raw),image.width(),image.height(),image.bytesPerLine(),QImage.Format.Format_RGBA8888).copy()
+                    ratio = 1.0
+                # Preserve the target hue when the brightest channel saturates.
+                shades.append(min(ratio, 255 / max(1, target.red(), target.green(), target.blue())))
+            channels = [bright.point([round(channel * ratio) for ratio in shades])
+                        for channel in (target.red(), target.green(), target.blue())]
+            source.paste(Image.merge("RGBA", (*channels, alpha)), mask=mask)
+        if animal == "Dog":
+            dim = ImageChops.darker(red, ImageChops.darker(green, blue))
+            neutral = ImageChops.subtract(bright, dim).point(lambda v: 255 if v < 48 else 0)
+            charcoal = ImageChops.darker(neutral, bright.point(lambda v: 255 if 35 < v < 155 else 0))
+            apply_coat(charcoal, 0.65, 0.90)
+        apply_coat(orange, 0.55, 0.55)
+        tinted = QImage(source.tobytes(), *size, image.bytesPerLine(), QImage.Format.Format_RGBA8888).copy()
         if len(_SPRITE_TINTS) >= 96:
             _SPRITE_TINTS.pop(next(iter(_SPRITE_TINTS)))
         _SPRITE_TINTS[key] = tinted
     return _SPRITE_TINTS[key]
 
 
-def animal_frame_image(animal, pose, frame, direction=1, tail_offset=0, breath=0,
-                       dangle=0, palette=None, stretch=0, effects=True, motion_phase=None):
-    """Paint a single original-art frame, with optional continuous secondary motion."""
-    bases, clips = _sprite_bases(animal)
-    baked = animal in _MOTION_BASES
-    discrete_phase = frame % 4
-    if pose == "walk":
-        clip = "walk"
-    elif pose in ("held", "fall", "stretch"):
-        clip = "air"
-    elif pose == "blink":
-        clip = "blink" if "blink" in clips else "pet"
-    elif pose in ("pet", "petted", "yawn"):
-        clip = "pet"
-    elif pose == "sleep":
-        clip = "sleep"
-    elif pose == "groom":
-        clip = "groom"
-    elif motion_phase is not None and pose in ("rest", "watch") and "idle" in clips:
-        clip = "idle"
-    else:
-        clip = "rest"
-    indices = clips[clip]
-    index = indices[frame % len(indices)]
-    source = _sprite_tinted(animal,index,palette)
-    width,height = SPRITE_CANVAS
-    image = QImage(width,height,QImage.Format.Format_ARGB32_Premultiplied)
+WALK_DUTY = 0.68
+WALK_FLOOR = 318.0
+# One intact standing drawing supplies every texture in a walk. Limbs are
+# connected at fixed joints; independently generated poses are never mixed.
+WALK_RIGS = {
+    "Cat": {
+        "frame": 6, "stride": 48.0, "lift": 12.0, "body_drop": 12.0, "speed": 19.0,
+        "body": ((0,0),(400,0),(400,216),(345,216),(320,232),(299,237),
+                 (294,222),(245,220),(231,228),(204,229),(183,237),
+                 (166,242),(139,242),(122,227),(109,215),(0,215)),
+        "limbs": {
+            "hind": {"root": (155,215), "knee": (135,262), "ankle": (132,289),
+                     "foot": (143,310), "sole": 310, "bend": 1,
+                     "outline": ((131,200),(180,204),(185,232),(164,254),
+                                 (154,275),(153,292),(168,300),(168,315),
+                                 (124,318),(109,307),(101,280),(103,257),(122,233))},
+            "fore": {"root": (272,213), "knee": (269,259), "ankle": (273,289),
+                     "foot": (283,313), "sole": 313, "bend": 1,
+                     "outline": ((249,199),(299,202),(301,235),(296,261),
+                                 (294,288),(309,300),(308,316),(259,318),
+                                 (247,303),(247,270),(245,233))},
+        },
+    },
+    "Dog": {
+        "frame": 0, "stride": 62.0, "lift": 13.0, "body_drop": 13.0, "speed": 25.0,
+        "body": ((0,0),(400,0),(400,225),(300,225),(291,230),(267,234),
+                 (248,236),(222,230),(203,229),(185,231),(171,227),
+                 (156,220),(146,214),(131,220),(112,230),(92,232),
+                 (75,225),(0,225)),
+        "limbs": {
+            "hind": {"root": (111,215), "knee": (109,259), "ankle": (119,285),
+                     "foot": (120,313), "sole": 313, "bend": 1,
+                     "texture_from": "fore",
+                     "outline": ((77,205),(108,203),(126,220),(119,240),
+                                 (103,254),(95,267),(91,280),(86,291),(91,302),
+                                 (89,310),(75,315),(52,312),(46,304),(48,282),
+                                 (51,260),(56,242),(69,226))},
+            "fore": {"root": (236,220), "knee": (231,259), "ankle": (240,285),
+                     "foot": (241,313), "sole": 313, "bend": 1,
+                     "outline": ((208,212),(250,208),(252,249),(250,273),
+                                 (254,287),(263,297),(264,307),(255,314),
+                                 (218,314),(208,302),(204,281),(202,257),(201,238))},
+        },
+    },
+    "Fox": {
+        "frame": 6, "stride": 38.0, "lift": 10.0, "body_drop": 9.0, "speed": 16.5,
+        "body": ((0,0),(400,0),(400,229),(333,229),(320,238),(303,245),
+                 (283,248),(268,246),(251,240),(228,238),(208,242),
+                 (194,248),(174,249),(151,246),(135,240),(126,232),
+                 (111,235),(102,243),(78,243),(49,226),(0,226)),
+        "limbs": {
+            "hind": {"root": (165,224), "knee": (164,260), "ankle": (168,288),
+                     "foot": (178,315), "sole": 315, "bend": 1,
+                     "texture_from": "fore", "paw_width": 0.78,
+                     "outline": ((140,207),(166,201),(191,209),(204,225),
+                                 (199,243),(180,255),(148,267),(137,277),
+                                 (135,288),(130,296),(119,301),(109,296),
+                                 (105,288),(108,272),(113,255),(120,241),(130,226))},
+            "fore": {"root": (280,234), "knee": (283,266), "ankle": (287,288),
+                     "foot": (300,315), "sole": 315, "bend": 1,
+                     "outline": ((252,221),(287,216),(310,234),(305,260),
+                                 (302,283),(303,290),(316,294),(323,301),
+                                 (323,313),(313,319),(283,319),(274,311),
+                                 (269,296),(267,275),(256,253))},
+        },
+    },
+}
+_WALK_TEXTURES = {}
+
+
+def _walking_speed(animal, width=WIDTH):
+    # A smaller animal covers fewer pixels per step, rather than paddling
+    # faster to maintain the same screen speed. Crow keeps its existing pace.
+    rig = WALK_RIGS.get(animal)
+    return rig["speed"]*width/WIDTH if rig else WALK_SPEED
+
+
+def _walk_foot(phase, center_x, floor_y, stride, lift):
+    """A planted stance followed by one low swing, with matching end tangents."""
+    phase = float(phase) % 1.0
+    if phase < WALK_DUTY:
+        return center_x + stride*(0.5-phase/WALK_DUTY), floor_y, True
+    t = (phase-WALK_DUTY)/(1-WALK_DUTY)
+    # Hermite tangents match the backward ground speed at both contact joins.
+    tangent = -(1-WALK_DUTY)/WALK_DUTY
+    progress = (-2*t**3+3*t*t) + (2*t**3-3*t*t+t)*tangent
+    return (center_x + stride*(progress-0.5),
+            floor_y-lift*math.sin(math.pi*t)**2, False)
+
+
+def _solve_leg(root, target, upper_length, lower_length, bend):
+    """Two-bone inverse kinematics; link lengths never depend on the frame."""
+    dx, dy = target[0]-root[0], target[1]-root[1]
+    distance = max(1e-8, math.hypot(dx,dy))
+    reach = min(upper_length+lower_length-1e-7,
+                max(abs(upper_length-lower_length)+1e-7,distance))
+    along = (upper_length**2-lower_length**2+reach**2)/(2*reach)
+    height = math.sqrt(max(0.0,upper_length**2-along**2)) * bend
+    ux, uy = dx/distance, dy/distance
+    return root[0]+ux*along-uy*height, root[1]+uy*along+ux*height
+
+
+def _walk_path(points):
+    path = QPainterPath()
+    path.moveTo(*points[0])
+    for point in points[1:]:
+        path.lineTo(*point)
+    path.closeSubpath()
+    return path
+
+
+def _walk_textures(animal, palette):
+    key = animal, palette
+    if key not in _WALK_TEXTURES:
+        rig = WALK_RIGS[animal]
+        _bases, clips = _sprite_bases(animal)
+        source = _sprite_tinted(animal,clips["walk"][rig["frame"]],palette)
+        def cut(points, top=0, bottom=320, dark=False):
+            image = QImage(*SPRITE_CANVAS,QImage.Format.Format_ARGB32_Premultiplied)
+            image.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(image)
+            painter.setClipPath(_walk_path(points))
+            painter.setClipRect(QRectF(0,top,400,bottom-top),Qt.ClipOperation.IntersectClip)
+            painter.drawImage(0,0,source)
+            if dark:
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
+                painter.fillRect(image.rect(),QColor(25,17,30,42))
+            painter.end()
+            return image
+        textures = {"body": cut(rig["body"])}
+        sources = {limb.get("texture_from",name) for name,limb in rig["limbs"].items()}
+        for name in sources:
+            limb = rig["limbs"][name]
+            for far in (False,True):
+                textures[name,far] = (
+                    cut(limb["outline"],bottom=limb["knee"][1]+1.2,dark=far),
+                    cut(limb["outline"],top=limb["knee"][1]-1.2,
+                        bottom=limb["ankle"][1]+1.2,dark=far),
+                    cut(limb["outline"],top=limb["ankle"][1]-1.2,dark=far),
+                )
+        if len(_WALK_TEXTURES) >= 6:
+            _WALK_TEXTURES.pop(next(iter(_WALK_TEXTURES)))
+        _WALK_TEXTURES[key] = textures
+    return _WALK_TEXTURES[key]
+
+
+def _walk_leg_pose(animal, name, phase, far=False):
+    rig = WALK_RIGS[animal]
+    limb = rig["limbs"][name]
+    # A four-beat walk: same-side hind, fore, opposite hind, fore. Far legs
+    # attach a little behind the visible side, rather than fanning sideways.
+    offset = (0.25 if name == "fore" else 0.0) + (0.5 if far else 0.0)
+    bob = math.sin(phase*math.tau*2)*0.45
+    side_x, side_y = (13.0,-3.0) if far else (0.0,0.0)
+    root = limb["root"][0]+side_x, limb["root"][1]+bob+rig["body_drop"]
+    center = limb["root"][0]+side_x-2.0
+    target_x,target_y,contact = _walk_foot(phase-offset,center,
+        limb["ankle"][1]+WALK_FLOOR-limb["sole"]+side_y,rig["stride"],rig["lift"])
+    target = target_x,target_y
+    upper = math.dist(limb["root"],limb["knee"])
+    lower = math.dist(limb["knee"],limb["ankle"])
+    knee = _solve_leg(root,target,upper,lower,limb["bend"])
+    return root,knee,target,contact
+
+
+def _ease(value):
+    value = max(0.0, min(1.0, value))
+    return value*value*(3-2*value)
+
+
+def _gesture(phase, anticipate=0.16, arrive=0.43, release=0.68):
+    """Reach, hold, recover. The hold is genuinely still, not a sine wave."""
+    if phase < anticipate:
+        return 0.0
+    if phase < arrive:
+        return _ease((phase-anticipate)/(arrive-anticipate))
+    return 1.0-_ease((phase-release)/(1-release))
+
+
+def _standing_geometry(animal, action, phase, dangle=0, stretch=0):
+    """Rigid trunk and two fixed-length links per leg, with floor-space targets."""
+    rig = WALK_RIGS[animal]
+    hip = rig["limbs"]["hind"]["root"]
+    angle, dx, dy, head_angle, tail_angle = 0.0,0.0,rig["body_drop"],0.0,0.0
+    amount = 0.0
+    if action == "stretch":
+        amount = _gesture(phase,0.08,0.40,0.69)
+        angle, dx, dy = 23*amount, {"Cat":-25,"Dog":-15,"Fox":-20}[animal]*amount, rig["body_drop"]-8*amount
+        head_angle = 0.0
+        tail_angle = 0.0
+    elif action == "land":
+        # Contact -> deceleration -> restrained rebound -> settled stance.
+        compression = (_ease(phase/0.25) if phase < 0.25 else
+                       1-_ease((phase-0.25)/0.43) if phase < 0.68 else
+                       -0.10*math.sin(math.pi*(phase-0.68)/0.32))
+        dy += 18*compression
+        angle = 3*compression
+        head_angle = -4*compression
+        tail_angle = 5*math.sin(math.pi*phase)**2*(1-phase)
+    elif action in ("held","fall"):
+        settle = _ease(phase/0.60)
+        angle = -3.5*settle if action == "held" else -3*(1-settle)
+        # Support under the shoulders. The hindquarters hang below that point;
+        # no running/paddling cycle is played while suspended.
+        hip = rig["limbs"]["fore"]["root"]
+        dy = 3
+        dx = 0
+        head_angle = -angle*0.55
+        tail_angle = (6*math.sin(phase*math.pi*2.3)*math.exp(-phase*4)
+                      + max(-4,min(4,dangle*2)))
+    elif action == "turn":
+        amount = math.sin(math.pi*phase)**2
+        dy += 5*amount
+        head_angle = -7*amount
+        tail_angle = 7*amount
+    def body_point(point):
+        rad = math.radians(angle)
+        x,y = point[0]-hip[0],point[1]-hip[1]
+        return hip[0]+dx+x*math.cos(rad)-y*math.sin(rad),hip[1]+dy+x*math.sin(rad)+y*math.cos(rad)
+    def foot_target(name, limb, far):
+        side_x,side_y = (11.0,-3.0) if far else (0.0,0.0)
+        ankle_y = limb["ankle"][1]+WALK_FLOOR-limb["sole"]+side_y
+        target = (limb["root"][0]-2+side_x,ankle_y)
+        contact = True
+        if action == "stretch" and name == "fore":
+            # A small swing reaches to the forward support. Once the chest is
+            # low, the paws stay exactly there through the quiet stretch hold.
+            lift = 10*math.sin(math.pi*amount)**2
+            reach_forward = {"Cat": 40.0, "Dog": 20.0, "Fox": 15.0}[animal]
+            target = target[0]+reach_forward*amount,target[1]-lift
+            contact = amount < 1e-7 or amount > 1-1e-7
+        elif action == "turn":
+            lift = math.sin(math.pi*min(1,phase*2)) if far else math.sin(math.pi*max(0,(phase-.5)*2))
+            target = target[0],target[1]-7*max(0,lift)
+            contact = lift < 1e-7
+        return target,contact
+
+    if action not in ("held","fall"):
+        # Solve body height against all planted/swing targets, never clamp an
+        # ankle off its intended path. This is a rigid torso translation; leg
+        # links retain their measured lengths and contact soles stay level.
+        extra_drop = 0.0
+        for far in (True,False):
+            for name,limb in rig["limbs"].items():
+                root = body_point(limb["root"])
+                root = root[0]+(11 if far else 0),root[1]
+                target,_contact = foot_target(name,limb,far)
+                reach = math.dist(limb["root"],limb["knee"])+math.dist(limb["knee"],limb["ankle"])-0.5
+                horizontal = target[0]-root[0]
+                needed_y = target[1]-math.sqrt(max(0,reach*reach-horizontal*horizontal))
+                extra_drop = max(extra_drop,needed_y-root[1])
+        dy += extra_drop
+
+    legs = {}
+    for far in (True,False):
+        side_x = 11.0 if far else 0.0
+        for name,limb in rig["limbs"].items():
+            root = body_point(limb["root"])
+            root = root[0]+side_x,root[1]
+            target,contact = foot_target(name,limb,far)
+            if action in ("held","fall"):
+                ready = _ease(phase) if action=="fall" else 0.0
+                hang = 0.90 if name=="fore" else 0.86
+                length = math.dist(limb["root"],limb["knee"])+math.dist(limb["knee"],limb["ankle"])
+                target = (root[0]+(5 if name=="fore" else -7)*(1-ready),
+                          root[1]+length*(hang+0.04*ready))
+                contact = False
+            upper = math.dist(limb["root"],limb["knee"])
+            lower = math.dist(limb["knee"],limb["ankle"])
+            knee = _solve_leg(root,target,upper,lower,limb["bend"])
+            legs[name,far] = root,knee,target,contact
+    return body_point,angle,head_angle,tail_angle,legs
+
+
+def _articulated_image(animal, action, phase, palette, dangle=0, stretch=0):
+    rig,textures = WALK_RIGS[animal],_walk_textures(animal,palette)
+    image = QImage(*SPRITE_CANVAS,QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-    sx, sy, angle, offset = 1.0, 1.0, 0.0, 0.0
-    tail_sway = 0.0
-    continuous = motion_phase is not None
-    if continuous:
-        normalized = float(motion_phase) % 1.0
-        theta = normalized * math.tau
-        wave, twice = math.sin(theta), math.sin(theta*2)
-        if pose == "land":
-            sx,sy = ((1.035,0.92),(0.985,1.012),(1.0,1.0))[frame%3]
-        elif pose in ("held","fall"):
-            # The six drawn frames provide the paddling. This small continuous
-            # spring response follows the same clock when held becomes falling.
-            # Leave room for the ear and paw extremities already present in
-            # the atlas. Relative elongation stays within the fixed canvas.
-            sy = 0.97 + min(3,max(0,stretch))*0.0095 + twice*0.001
-            sx = 1 - min(3,max(0,stretch))*0.005
-            angle, offset = wave*0.45, -2.3-math.cos(theta)*0.6
-        elif pose in ("pet","petted"):
-            sy, angle, tail_sway = 1+twice*0.003, wave*0.18, twice*2.2
-        elif pose == "walk":
-            # Preserve the weight shifts and planted paws already drawn into the
-            # sixteen gait frames; do not normalize their bounds on playback.
-            sy, angle = 1+twice*0.001, wave*0.035
-        elif pose == "sleep":
-            sy = 1+wave*0.003
-        elif pose in ("groom","yawn","stretch","watch"):
-            sy, angle = 1+wave*0.002, wave*0.18
-            if pose == "watch":
-                angle += max(-1,min(1,dangle))*0.15
-                tail_sway = math.sin(theta+0.6)*1.0
-        else:
-            # A quiet chest breath, head lean and independent tail drift use
-            # original artwork pixels; no face or limbs are redrawn.
-            sy, angle = 1+wave*0.0035, twice*0.08
-            tail_sway = math.sin(theta+0.6)*1.5
-    elif pose == "land":
-        sx,sy = ((1.035,0.92),(0.985,1.012),(1.0,1.0))[frame%3]
-    elif pose in ("held","fall"):
-        sy = 1 + min(3,max(0,stretch))*0.012
-        sx = 1 - min(3,max(0,stretch))*0.005
-        angle = (-1.0,0.0,1.0,0.0)[discrete_phase]
-        offset = (-3,0,-1,2)[discrete_phase]
-    elif pose in ("pet","petted"):
-        angle = (-0.4,0.0,0.4,0.0)[discrete_phase]
-        sy = (1.0,0.997,1.0,1.003)[discrete_phase]
-    elif pose in ("groom","yawn","stretch","watch"):
-        angle = (-0.5,0.0,0.5,0.0)[discrete_phase] + (dangle*0.4 if pose == "watch" else 0)
-        sy = 0.995 if discrete_phase%2 else 1.0
-    elif pose == "sleep":
-        sy = 1.0 if frame%2 == 0 else 0.994
+    hip = rig["limbs"]["hind"]["root"]
+    if action == "walk":
+        bob = math.sin(phase*math.tau*2)*0.65
+        body_point = lambda p: (p[0],p[1]+rig["body_drop"]+bob)
+        angle,head_angle,tail_angle = 0.0,math.sin(phase*math.tau*2-.5)*0.6,math.sin(phase*math.tau-.7)*1.4
+        legs = {(n,f):_walk_leg_pose(animal,n,phase,f) for n in rig["limbs"] for f in (True,False)}
     else:
-        sy = 1 + max(-1,min(1,breath))*0.004
-    painter.translate(width/2,height-1+offset)
-    painter.rotate(angle)
-    painter.scale(sx,sy)
-    painter.translate(-width/2,-(height-1))
-    if not continuous and tail_offset and pose in ("rest","watch"):
-        tail_sway = float(tail_offset)
-    if tail_sway and pose in ("rest","watch","pet","petted"):
-        split = int(width*0.43)
-        # Short textured ribbons bend the brush without translucent crossfades.
-        # The body overlaps the seam by one pixel, avoiding a transparent crack.
-        for y in range(0,height,8):
-            shift = tail_sway * (1-y/height)**1.5
-            painter.drawImage(QRectF(shift,y,split+1,8),source,QRectF(0,y,split+1,8))
-        painter.drawImage(QRectF(split,0,width-split,height),source,QRectF(split,0,width-split,height))
+        body_point,angle,head_angle,tail_angle,legs = _standing_geometry(animal,action,phase,dangle,stretch)
+    def segment(texture, source_start, source_end, start, end):
+        # Connected cross-sections share endpoints; fixed-length IK determines
+        # the joint positions. Overlapping fur hides both joint cross-sections.
+        source_dy = source_end[1]-source_start[1]
+        shear = ((end[0]-start[0])-(source_end[0]-source_start[0]))/source_dy
+        scale_y = (end[1]-start[1])/source_dy
+        painter.save()
+        painter.setWorldTransform(QTransform(1,0,shear,scale_y,
+            start[0]-source_start[0]-shear*source_start[1],start[1]-scale_y*source_start[1]))
+        painter.drawImage(0,0,texture)
+        painter.restore()
+    def leg(name,far):
+        limb = rig["limbs"][name]
+        source_name = limb.get("texture_from",name)
+        source_limb = rig["limbs"][source_name]
+        root,knee,ankle,_contact = legs[name,far]
+        upper,lower,_paw = textures[source_name,far]
+        segment(upper,source_limb["root"],source_limb["knee"],root,knee)
+        segment(lower,source_limb["knee"],source_limb["ankle"],knee,ankle)
+        paw_name = limb.get("paw_from",source_name)
+        paw_limb = rig["limbs"][paw_name]
+        painter.save()
+        painter.translate(*ankle)
+        painter.scale(limb.get("paw_width",1.0),1.0)
+        painter.drawImage(QPointF(-paw_limb["ankle"][0],-paw_limb["ankle"][1]),textures[paw_name,far][2])
+        painter.restore()
+    def rigid(texture, pivot, extra=0):
+        target = body_point(pivot)
+        painter.save()
+        painter.translate(*target)
+        painter.rotate(angle+extra)
+        painter.drawImage(QPointF(-pivot[0],-pivot[1]),texture)
+        painter.restore()
+    for name in ("hind","fore"):
+        leg(name,True)
+    for name in ("hind","fore"):
+        leg(name,False)
+    # Keep the complete torso/head/tail illustration rigid. Splitting an
+    # outlined drawing at the collar can expose seams during a deep bow; this
+    # intact volume preserves markings, facial features and the full silhouette.
+    body_image = textures["body"]
+    # Tiny, delayed tail response is confined to the painted tail landmark.
+    # Head and torso offsets are zero: faces and body volume remain rigid.
+    if action=="held":
+        follow=3*math.sin(phase*math.pi*2.3)*math.exp(-phase*4)+max(-2,min(2,dangle*.7))
+    elif action=="land":
+        follow=2*math.sin(phase*math.pi*2)*math.sin(phase*math.pi)*(1-phase)
+    elif action=="walk":
+        follow=1.6*math.sin(phase*math.tau-.7)
     else:
-        painter.drawImage(0,0,source)
-    painter.resetTransform()
-    if effects and pose in ("pet","petted"):
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#d77c9d"))
-        if continuous:
-            drift = math.sin(normalized*math.tau)
-            hearts = ((45+drift*4,34-drift*5),(350-drift*3,54+drift*4))
-        else:
-            hearts = ((45+discrete_phase*3,35-discrete_phase*3),(350,55+discrete_phase*2))
-        for hx,hy in hearts:
-            hx,hy = round(hx),round(hy)
-            painter.drawPolygon(QPolygon([QPoint(hx,hy+4),QPoint(hx+4,hy),
-                QPoint(hx+8,hy+4),QPoint(hx+12,hy),QPoint(hx+16,hy+4),
-                QPoint(hx+16,hy+9),QPoint(hx+8,hy+17),QPoint(hx,hy+9)]))
+        follow=1.2*math.sin(phase*math.pi*2)*math.sin(phase*math.pi)
+    if abs(follow)>.01:
+        body_image=_deform_action(body_image,animal,"stretch",((follow,-follow*.25),(0,0),(0,0),(0,0)))
+    rigid(body_image,hip)
     painter.end()
-    if not baked and pose not in ("held","fall","stretch"):
-        # Legacy source sheets need this one-time-style correction. Baked
-        # atlases already contain their fixed canvas and paw anchors.
-        visible = QRegion(QPixmap.fromImage(image).mask()).boundingRect()
-        if not visible.isEmpty() and visible.bottom() < height-1:
-            anchored = QImage(width,height,QImage.Format.Format_ARGB32)
-            anchored.fill(Qt.GlobalColor.transparent)
-            anchor_painter = QPainter(anchored)
-            anchor_painter.drawImage(0,height-1-visible.bottom(),image)
-            anchor_painter.end()
-            image = anchored
-    if direction < 0:
-        image = image.transformed(QTransform().scale(-1,1))
     return image
+
+
+def _walk_image(animal, phase, palette):
+    return _articulated_image(animal,"walk",float(phase)%1.0,palette)
+
+
+# Each point is a landmark in the 400 × 320 approved drawing. Its influence
+# tapers into the surrounding fur. The floor is pinned for seated poses.
+#                   tail tip  face     chest     forward paw  rear paw
+_ACTION_LANDMARKS = {
+    "Cat": {"idle": ((91,130),(283,94),(239,195)), "pet": ((89,149),(278,108),(244,202)),
+            "air": ((65,53),(306,91),(235,170),(342,236),(88,267),(153,291)),
+            "sleep": ((175,274),(265,211),(158,177)),
+            "groom": ((111,185),(251,145),(240,233),(278,207)),
+            "stretch": ((82,95),(318,88),(263,191),(279,298))},
+    "Dog": {"idle": ((126,187),(260,101),(247,195)), "pet": ((116,178),(261,99),(243,192)),
+            "air": ((87,72),(279,86),(223,179),(290,284),(41,264),(118,280)),
+            "sleep": ((179,284),(250,202),(155,182)),
+            "groom": ((115,222),(212,165),(208,238),(201,229)),
+            "stretch": ((102,91),(296,94),(245,188),(263,296))},
+    "Fox": {"idle": ((132,104),(270,91),(250,191)), "pet": ((122,101),(271,89),(247,184)),
+            "air": ((116,78),(286,77),(241,181),(294,241),(195,287),(228,279)),
+            "sleep": ((243,256),(268,178),(146,159)),
+            "groom": ((91,103),(283,115),(241,206),(331,172)),
+            "stretch": ((113,56),(312,92),(264,203),(302,298))},
+}
+
+# Open and closed eye centres from the matching idle and petting drawings.
+_EYES = {
+    "Cat": ((280,102,269,117,21,16),(326,91,321,104,12,15)),
+    "Dog": ((256,108,257,106,19,16),(304,103,309,97,13,15)),
+    "Fox": ((274,100,264,107,15,14),(307,95,304,100,11,12)),
+}
+
+
+def _expression_image(animal, source, closed, eyelid, yawn):
+    """Lower the actual drawn eyelids over the seated face without moving its features."""
+    source = source.copy()
+    painter = QPainter(source)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    for x, y, closed_x, closed_y, rx, ry in _EYES[animal]:
+        # Cover the iris from above as the eyelid travels down.
+        target = QRectF(x-rx, y-ry, 2*rx, 2*ry)
+        outline = QPainterPath()
+        outline.addEllipse(target)
+        painter.save()
+        painter.setClipPath(outline)
+        painter.setClipRect(QRectF(x-rx, y-ry, 2*rx, 2*ry*eyelid),
+                            Qt.ClipOperation.IntersectClip)
+        painter.drawImage(target, closed, QRectF(closed_x-rx,closed_y-ry,2*rx,2*ry))
+        painter.restore()
+    if yawn > 0.03:
+        # The jaw hinges below the muzzle; leave the nose and whiskers intact.
+        x, y, w = {"Cat": (311,131,19), "Dog": (287,138,26), "Fox": (312,124,17)}[animal]
+        depth = (24 if animal == "Dog" else 21)*yawn
+        mouth = QPainterPath(QPointF(x-w/2,y))
+        mouth.quadTo(x,y+2, x+w/2,y-2)
+        mouth.cubicTo(x+w/2,y+depth, x-w/4,y+depth+4, x-w/2,y)
+        painter.fillPath(mouth, QColor("#59323a"))
+        painter.setClipPath(mouth)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#d88986"))
+        painter.drawEllipse(QRectF(x-w/4,y+depth*0.7,w*0.65,depth*0.55))
+    painter.end()
+    return source
+
+
+def _action_motion(animal, action, phase, dangle, stretch):
+    """Offsets of the painted body regions at this point in the gesture."""
+    theta = phase*math.tau
+    wave, follow = math.sin(theta), math.sin(theta-0.6)
+    lift = (1-math.cos(theta))*0.5
+    wag = {"Cat": 1.0, "Dog": 1.35, "Fox": 0.78}[animal]
+    if action == "sleep":
+        return ((0,0),(0,-0.4*wave),(0,-1.6*wave))
+    if action == "groom":
+        return ((5*follow,-2*follow),(3.5*wave,5*wave),(1.4*wave,1.5*wave),
+                (5*follow,-8*follow))
+    if action == "stretch":
+        return ((-8*lift,-10*lift),(1*lift,33*lift),(0,21*lift),(14*lift,0))
+    if action == "air":
+        # Extend one pair as the other tucks. The return takes the paws under
+        # the body, so each foot follows an arc rather than a straight shuttle.
+        speed_stretch = min(3,max(0,stretch))
+        return ((9*follow,-4*follow),(-2.3*wave,-1.7*follow),
+                (-1.5*wave,-1.8*speed_stretch),(20*wave,-8*lift-1+speed_stretch),
+                (-18*wave,-7*(1-lift)),(15*wave,-6*lift))
+    if action == "pet":
+        return ((15*wag*follow,-5*follow),(-8*lift,6*lift),(-2.5*lift,2*lift))
+    if action == "watch":
+        return ((7*wag*follow,-2*follow),(2.3*wave,6*dangle-2*lift),(1.5*wave,-2*lift))
+    if action == "yawn":
+        return ((4*follow,-2*follow),(-4*lift,-10*lift),(0,-4*lift))
+    if action == "land":
+        # Compress immediately on impact, rebound, then settle to neutral.
+        compression = math.sin(phase*math.pi*1.8)*math.sin(phase*math.pi)*(1-phase)*3.0
+        return ((-4*compression,6*compression),(0,17*compression),(0,10*compression))
+    # Long quiet holds. The tail tip responds after a small breathing movement.
+    breath = math.sin(theta)*0.45
+    tip = _gesture(phase,.34,.48,.57)
+    return ((2.0*wag*tip,-0.8*tip),(0,-breath),(0,-1.2*breath))
+
+
+@functools.lru_cache(maxsize=24)
+def _action_mesh(animal, rig):
+    """Precompute skinning weights on a common lattice. Adjacent cells share edges."""
+    points = _ACTION_LANDMARKS[animal][rig]
+    radii = ((118,154),(134,133),(95,127),(72,82),(65,75),(53,66))
+    vertices = []
+    for y in range(0,321,32):
+        for x in range(0,401,40):
+            weights = []
+            for (cx,cy), (rx,ry) in zip(points,radii):
+                weight = max(0,1-((x-cx)/rx)**2-((y-cy)/ry)**2)
+                weights.append(weight*weight*(3-2*weight))
+            if rig not in ("air","stretch"):
+                pin = max(0,min(1,(310-y)/38))
+                weights = [w*pin for w in weights]
+            vertices.append((x,y,weights))
+    tiles = []
+    for row in range(10):
+        for col in range(10):
+            a = row*11+col
+            corners = (a,a+1,a+12,a+11)
+            tile = QRectF(col*40,row*32,40,32)
+            polygon = QPolygonF([QPointF(vertices[k][0],vertices[k][1]) for k in corners])
+            tiles.append((corners,tile,polygon))
+    return vertices, tiles
+
+
+def _deform_action(source, animal, rig, offsets):
+    # Each destination tile samples one continuous patch of the original
+    # drawing. Clip in destination coordinates to avoid cracks or overlapping fur.
+    vertices, tiles = _action_mesh(animal,rig)
+    samples = []
+    for x,y,weights in vertices:
+        dx, dy = 0.0, 0.0
+        for weight,(ox,oy) in zip(weights,offsets):
+            dx += weight*ox
+            dy += weight*oy
+        samples.append(QPointF(x-dx,y-dy))
+    image = QImage(*SPRITE_CANVAS,QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    transform = QTransform()
+    for corners,tile,destination in tiles:
+        src = QPolygonF([samples[k] for k in corners])
+        if QTransform.quadToQuad(src,destination,transform):
+            painter.resetTransform()
+            painter.setClipRect(tile)
+            painter.setTransform(transform)
+            painter.drawImage(0,0,source)
+    painter.end()
+    return image
+
+
+def _key_transition(animal, pose, phase, palette):
+    _,clips = _sprite_bases(animal)
+    indices = clips.get("transition_"+pose)
+    if indices is None:
+        raise RuntimeError(f"Missing {animal} {pose} transition artwork; reinstall the complete app.")
+    phase = _ease(phase)
+    return _sprite_tinted(animal,indices[min(len(indices)-1,round(phase*(len(indices)-1)))],palette)
+
+
+def _groom_image(animal, phase, palette):
+    # Raise the paw and incline the head into contact before licking. A second
+    # lick follows a quiet pause; lowering uses its independently authored path.
+    if phase < .22:
+        return _key_transition(animal,"groom",phase/.22,palette)
+    if phase > .79:
+        return _key_transition(animal,"ungroom",(phase-.79)/.21,palette)
+    _,clips = _sprite_bases(animal)
+    source = _sprite_tinted(animal,clips["groom"][0],palette)
+    t = (phase-.22)/.57
+    lick = (_gesture(t,0.02,.13,.21) if t < .48 else _gesture(t,.51,.63,.74))
+    # Contact motion stays local to head, wrist and tongue. The supporting paw
+    # and haunches remain completely still throughout the seated action.
+    offsets = ((0,0),(0,1.8*lick),(0,0),(1.5*lick,-2.0*lick))
+    image = _deform_action(source,animal,"groom",offsets)
+    if lick > .25:
+        x,y = {"Cat":(273,197),"Dog":(200,226),"Fox":(337,161)}[animal]
+        painter = QPainter(image)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#d88986"))
+        painter.drawRoundedRect(QRectF(x-2,y,5,5*lick),2,2)
+        painter.end()
+    return image
+
+
+def _yawn_image(animal, phase, palette):
+    _,clips = _sprite_bases(animal)
+    source = _sprite_tinted(animal,clips["idle"][0],palette)
+    closed = _sprite_tinted(animal,clips["pet"][0],palette)
+    opening = _gesture(phase,.10,.49,.63)
+    source = _expression_image(animal,source,closed,.86*opening,opening)
+    # Only the jaw opens. A small rigid head extension follows the breath.
+    nx,ny = {"Cat":(267,177),"Dog":(267,189),"Fox":(273,191)}[animal]
+    image = QImage(*SPRITE_CANVAS,QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    head = QPainterPath();head.addRect(QRectF(170,0,230,ny+12))
+    body = QPainterPath();body.addRect(QRectF(0,ny-12,400,320-ny+12))
+    left = QPainterPath();left.addRect(QRectF(0,0,170,320))
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    painter.setClipPath(body.united(left));painter.drawImage(0,0,source)
+    painter.setClipping(False)
+    painter.translate(nx,ny);painter.rotate(-3.5*opening);painter.translate(-nx,-ny)
+    painter.setClipPath(head);painter.drawImage(0,0,source)
+    painter.end()
+    return image
+
+
+def animal_frame_image(animal, pose, frame, direction=1, tail_offset=0, breath=0,
+                       dangle=0, palette=None, stretch=0, effects=True, motion_phase=None):
+    """Sample the same articulated drawings for the desktop and artwork exports."""
+    if pose == "walk":
+        phase = frame/16 if motion_phase is None else motion_phase
+        image = _walk_image(animal,phase,palette)
+    elif pose in ("stand","sit","settle","wake"):
+        phase = frame/3 if motion_phase is None else motion_phase
+        image = _key_transition(animal,pose,phase,palette)
+    elif pose in ("groom","yawn"):
+        phase = frame/4 if motion_phase is None else max(0.0,min(1.0,motion_phase))
+        image = (_groom_image if pose=="groom" else _yawn_image)(animal,phase,palette)
+    elif pose == "stretch":
+        phase = frame/4 if motion_phase is None else max(0.0,min(1.0,motion_phase))
+        if phase < .18:
+            image = _key_transition(animal,"stand",phase/.18,palette)
+        elif phase > .82:
+            image = _key_transition(animal,"sit",(phase-.82)/.18,palette)
+        else:
+            image = _articulated_image(animal,pose,(phase-.18)/.64,palette,dangle,stretch)
+    elif pose in ("held","fall","land","turn"):
+        count = 6 if pose in ("held","fall") else 3 if pose=="land" else 4
+        phase = frame/count if motion_phase is None else max(0.0,min(1.0,motion_phase))
+        image = _articulated_image(animal,pose,phase,palette,dangle,stretch)
+        if pose == "turn":
+            # Project toward the narrow end-on silhouette while the paws step
+            # around their support. Facing changes only at this narrow midpoint.
+            width = 1.0-.76*math.sin(math.pi*phase)**2
+            turned = QImage(*SPRITE_CANVAS,QImage.Format.Format_ARGB32_Premultiplied)
+            turned.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(turned)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            painter.translate(200,0);painter.scale(width,1);painter.translate(-200,0)
+            painter.drawImage(0,0,image);painter.end()
+            image = turned
+    else:
+        _bases, clips = _sprite_bases(animal)
+        action = {"held":"air","fall":"air","petted":"pet","rest":"idle","blink":"idle"}.get(pose,pose)
+        rig = "idle" if action in ("watch","land","yawn") else action
+        clip = "walk" if rig == "stretch" else rig
+        indices = clips.get(clip,clips["rest"])
+        phase = motion_phase
+        if phase is None:
+            count = 6 if action == "air" else 3 if action == "land" else 4
+            phase = frame%count/count
+        if action in ("land","stretch","yawn"):
+            phase = max(0.0,min(1.0,phase))
+        else:
+            phase %= 1.0
+        source = _sprite_tinted(animal,indices[0],palette)
+        if pose in ("blink","yawn"):
+            # During a blink the body continues on its independent idle clock.
+            eyelid = (1.0 if motion_phase is None else math.sin(math.pi*phase)**2) if pose == "blink" else math.sin(math.pi*phase)**2
+            if eyelid > 0.001:
+                closed = _sprite_tinted(animal,clips["pet"][0],palette)
+                source = _expression_image(animal,source,closed,eyelid,eyelid if pose == "yawn" else 0)
+            if pose == "blink":
+                phase = tail_offset
+        offsets = _action_motion(animal,action,phase,dangle,stretch)
+        image = _deform_action(source,animal,rig,offsets)
+        if effects and action == "pet":
+            painter = QPainter(image)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#d77c9d"))
+            drift = math.sin(phase*math.tau)
+            for hx,hy in ((45+drift*4,34-drift*5),(350-drift*3,54+drift*4)):
+                hx,hy = round(hx),round(hy)
+                painter.drawPolygon(QPolygon([QPoint(hx,hy+4),QPoint(hx+4,hy),
+                    QPoint(hx+8,hy+4),QPoint(hx+12,hy),QPoint(hx+16,hy+4),
+                    QPoint(hx+16,hy+9),QPoint(hx+8,hy+17),QPoint(hx,hy+9)]))
+            painter.end()
+    return image if direction >= 0 else image.transformed(QTransform().scale(-1,1))
+
 
 def fox_frame_image(pose, frame, direction=1, tail_offset=0, breath=0, dangle=0,
                     palette=None, stretch=0, motion_phase=None):
@@ -1962,6 +2664,7 @@ class DesktopCat(QWidget):
         self.palette_name = "Natural Coat"
         self.palette = PALETTES[self.palette_name]
         self.animal_type = "Cat"
+        self.motion.walk_speed = _walking_speed(self.animal_type,self.width())
         self.size_name, self.pixel_scale = "Medium", SIZES["Medium"]
         self._paused, self._user_hidden = False, False
         self._habits_enabled, self._cursor_interaction = True, False
@@ -1995,6 +2698,7 @@ class DesktopCat(QWidget):
         self._press_position: QPointF | None = None
         self._dragging = False
         self._drag_speed = 0.0
+        self._drag_sway = 0.0
         self._drag_sample_time = 0.0
         self._drag_sample_position = QPointF()
         self._landing_elapsed: float | None = None
@@ -2005,16 +2709,10 @@ class DesktopCat(QWidget):
         self._animation_time = 0.0
         self._pose_clock_kind = None
         self._pose_clock_started = 0.0
+        self._walk_phase = 0.0
         self._blink_in = self.rng.uniform(2.0, 5.0)
         self._blink_left = 0.0
         self._frames: dict[tuple, tuple[QPixmap, QRegion]] = {}
-        for pose, count in (("rest", 1), ("blink", 1), ("walk", 2),
-                            ("sleep", 2), ("held", 4), ("fall", 4), (PETTED, 4), ("land", 3)):
-            for frame in range(count):
-                for direction in (-1, 1):
-                    pixmap = draw_cat(pose, frame, direction)
-                    key = pose, frame, direction, 0, 0, 0, self.animal_type, self.palette, 0
-                    self._frames[key] = (pixmap, QRegion(pixmap.mask()))
         self._frame_key: tuple | None = None
         self._pixmap = QPixmap()
         self._last_area = QRectF()
@@ -2123,6 +2821,7 @@ class DesktopCat(QWidget):
         self.size_name, self.pixel_scale = name, SIZES[name]
         self.motion.width, self.motion.height = ART_WIDTH * self.pixel_scale, ART_HEIGHT * self.pixel_scale
         self.setFixedSize(int(self.motion.width), int(self.motion.height))
+        self.motion.walk_speed = _walking_speed(self.animal_type,self.width())
         self.motion.y = feet - self.motion.height
         if self._latched:
             self._pin_to_corner()
@@ -2178,7 +2877,7 @@ class DesktopCat(QWidget):
 
     def _cancel_drag(self) -> None:
         self._press_position, self._dragging = None, False
-        self._drag_speed = 0.0
+        self._drag_speed, self._drag_sway = 0.0, 0.0
         if self.motion.state == "held":
             self.motion.drop(self.available_area())
         if QWidget.mouseGrabber() is self:
@@ -2206,7 +2905,7 @@ class DesktopCat(QWidget):
 
     def start_crow_flight(self) -> bool:
         if (self.animal_type != "Crow" or self._latched or self._paused
-                or self._user_hidden or self.motion.state == "held"):
+                or self._user_hidden or self.motion.state in ("held", "land", "sit")):
             return False
         self._dismiss_reaction()
         self._cancel_habit()
@@ -2303,15 +3002,22 @@ class DesktopCat(QWidget):
             frame = int(self.motion.flight_time / CROW_FLAP_SECONDS) % 8
             tail_offset, breath = 0, 0
             dangle = max(-1, min(1, round(self.motion.vy / 80.0)))
-        elif self._landing_elapsed is not None and state != "held":
-            pose, frame = "land", min(2, int((self._landing_elapsed + 1e-9) / LAND_FRAME_SECONDS))
+        elif state == "land" or (self._landing_elapsed is not None and state != "held"):
+            progress = (self.motion.transition_time if state == "land" else self._landing_elapsed) / self.motion.landing_duration
+            pose, frame = "land", min(2, int(progress * 3))
+            tail_offset, breath = 0, 0
+        elif state in ("turn", "stand", "sit", "settle", "wake"):
+            duration = self.motion.turn_duration if state == "turn" else self.motion.transition_duration
+            frame = min(3, int(self.motion.transition_time / duration * 4))
             tail_offset, breath = 0, 0
         elif state in ("held", "fall"):
             count, seconds = (8, CROW_FLAP_SECONDS) if self.animal_type == "Crow" else (4, AIR_FRAME_SECONDS)
             frame = int(self._animation_time / seconds) % count
             speed = self._drag_speed if state == "held" else abs(self.motion.vy)
-            stretch = min(3, int(speed / 350.0))
+            stretch = min(3.0, speed / 350.0) if self.animal_type != "Crow" else min(3, int(speed / 350.0))
             tail_offset, breath = 0, 0
+            if state == "held":
+                dangle = round(self._drag_sway, 2)
         elif self._pet_until > 0:
             pose, frame = PETTED, int(self._animation_time / 0.09) % 4
             tail_offset, breath = 0, 0
@@ -2321,7 +3027,6 @@ class DesktopCat(QWidget):
             if pose == "watch":
                 cursor = QCursor.pos()
                 center = self.geometry().center()
-                self.motion.direction = 1 if cursor.x() >= center.x() else -1
                 dangle = -1 if cursor.y() < center.y() - 12 else 1 if cursor.y() > center.y() + 12 else 0
         elif state == "rest":
             pose = "sleep" if self.motion.sleeping else "blink" if self._blink_left > 0 else "rest"
@@ -2335,7 +3040,7 @@ class DesktopCat(QWidget):
         animated_art = self.animal_type in ("Cat", "Dog", "Fox")
         motion_phase = None
         if animated_art:
-            group = ("air" if pose in ("held", "fall") else
+            group = ("held" if pose == "held" else "fall" if pose == "fall" else
                      "idle" if pose in ("rest", "blink") else
                      "pet" if pose in ("pet", "petted") else pose)
             kind = self.animal_type, group
@@ -2343,48 +3048,120 @@ class DesktopCat(QWidget):
                 self._pose_clock_kind = kind
                 self._pose_clock_started = self._animation_time
             elapsed = max(0.0, self._animation_time-self._pose_clock_started)
-            if pose not in ("peek", "land"):
-                duration = ASSET_ANIMATION_SECONDS.get(group, 1.2)
-                # Only normalized, bounded phase values enter the frame cache.
-                # Milliperiod precision permits subpixel motion on every 16ms tick.
-                motion_phase = (round((elapsed/duration % 1.0)*1000) % 1000)/1000
-                _bases, clips = _sprite_bases(self.animal_type)
-                clip = ("walk" if pose == "walk" else
-                        "air" if pose in ("held","fall","stretch") else
-                        "blink" if pose == "blink" and "blink" in clips else
-                        "pet" if pose in ("pet","petted","blink","yawn") else
-                        "sleep" if pose == "sleep" else
-                        "groom" if pose == "groom" else
-                        "idle" if "idle" in clips else "rest")
-                frame = min(len(clips[clip])-1, int(motion_phase*len(clips[clip])))
-                if pose == "blink" and "blink" not in clips:
-                    frame = 0
-                # Continuous artwork supplies the breath and tail clock itself.
+            if pose != "peek":
                 tail_offset, breath = 0, 0
-        direction = 1 if pose == "peek" or (pose == PETTED and self.animal_type == "Cat") else self.motion.direction
+                if pose == "walk":
+                    # Backward paw travel in stance cancels forward window travel.
+                    motion_phase = self._walk_phase
+                elif pose == "land":
+                    landing_time = self.motion.transition_time if state == "land" else self._landing_elapsed
+                    motion_phase = min(1.0, landing_time / self.motion.landing_duration)
+                elif pose in ("turn", "stand", "sit", "settle", "wake"):
+                    duration = self.motion.turn_duration if pose == "turn" else self.motion.transition_duration
+                    motion_phase = min(1.0, self.motion.transition_time / duration)
+                elif pose == "held":
+                    motion_phase = min(1.0, elapsed / 0.48)
+                elif pose == "fall":
+                    # Extend the paws before contact, even on a short drop.
+                    distance = max(0.0, self.motion.bounds(self.available_area())[3]-self.motion.y)
+                    eta = (math.sqrt(max(0.0,self.motion.vy**2+2*GRAVITY*distance))-max(0.0,self.motion.vy))/GRAVITY
+                    motion_phase = min(1.0, max(elapsed/0.30, 1.0-eta/0.28))
+                elif pose == "blink":
+                    # The eyelids have their own short timeline. Resting chest
+                    # and tail motion continue underneath on the idle clock.
+                    tail_offset = (elapsed / ASSET_ANIMATION_SECONDS["idle"]) % 1.0
+                    motion_phase = 1.0 - min(1.0, self._blink_left / BLINK_SECONDS)
+                elif pose in ("groom", "yawn", "stretch"):
+                    motion_phase = min(1.0, self._habit_elapsed / HABIT_DURATIONS[pose])
+                else:
+                    duration = ASSET_ANIMATION_SECONDS[group]
+                    motion_phase = (elapsed / duration) % 1.0
+                if pose != "land":
+                    _bases, clips = _sprite_bases(self.animal_type)
+                    clip = {"held": "air", "fall": "air", "stretch": "air",
+                            "petted": "pet", "yawn": "pet", "rest": "idle",
+                            "watch": "idle"}.get(pose, pose)
+                    indices = clips.get(clip, clips["rest"])
+                    frame = min(len(indices)-1, int(motion_phase*len(indices)))
+        if self.animal_type == "Crow":
+            if pose == "walk":
+                motion_phase = self._walk_phase
+            elif pose == "land":
+                landing_time = self.motion.transition_time if state == "land" else self._landing_elapsed
+                motion_phase = min(1.0, landing_time / self.motion.landing_duration)
+            elif pose in ("turn", "stand", "sit", "settle", "wake"):
+                duration = self.motion.turn_duration if pose == "turn" else self.motion.transition_duration
+                motion_phase = min(1.0, self.motion.transition_time / duration)
+            elif pose in ("groom", "yawn", "stretch"):
+                motion_phase = min(1.0, self._habit_elapsed / HABIT_DURATIONS[pose])
+        direction = 1 if pose == "peek" else self.motion.direction
         key = pose, frame, direction, tail_offset, breath, dangle, self.animal_type, self.palette, stretch
+        display_scale = self.devicePixelRatioF() if animated_art and pose != "peek" else 1.0
+        offset_x = offset_y = 0
+        if display_scale > 1 and pose in ("walk", "fall"):
+            # The window can move only in whole desktop points. Put the
+            # remaining half-point on the Retina pixel grid so slow walks do
+            # not alternate between a frozen body and a two-pixel jump.
+            offset_x = round((self.motion.x - round(self.motion.x)) * display_scale)
+            offset_y = round((self.motion.y - round(self.motion.y)) * display_scale)
         if animated_art:
-            key = key[:-1] + (motion_phase, stretch)
+            key = key[:-1] + (display_scale, offset_x, offset_y, motion_phase, stretch)
+        else:
+            key += (motion_phase,)
         if key != self._frame_key:
             if key not in self._frames:
                 if pose == "peek":
                     pixmap = draw_peek(self.animal_type, self.palette)
                 elif animated_art:
                     pixmap = DRAWERS[self.animal_type](*key[:6], palette=self.palette,
-                        stretch=stretch, target_size=(self.width(),self.height()), motion_phase=motion_phase)
+                        stretch=stretch, target_size=(round(self.width()*display_scale),
+                                                      round(self.height()*display_scale)),
+                        motion_phase=motion_phase)
                 else:
-                    pixmap = DRAWERS[self.animal_type](*key[:6], palette=self.palette, stretch=stretch)
-                if pixmap.size() != self.size():
-                    pixmap = pixmap.scaled(self.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
-                                           Qt.TransformationMode.FastTransformation)
+                    pixmap = DRAWERS[self.animal_type](*key[:6], palette=self.palette,
+                                                     stretch=stretch, motion_phase=motion_phase)
+                if display_scale != 1.0:
+                    # Sample the drawing at display resolution. Qt window masks
+                    # use logical coordinates even when the display uses Retina.
+                    if offset_x or offset_y:
+                        placed = QPixmap(pixmap.size())
+                        placed.fill(Qt.GlobalColor.transparent)
+                        painter = QPainter(placed)
+                        painter.drawPixmap(offset_x, offset_y, pixmap)
+                        painter.end()
+                        pixmap = placed
+                    hit_image = pixmap.scaled(self.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation)
+                    mask = QRegion(hit_image.mask())
+                    pixmap.setDevicePixelRatio(display_scale)
+                else:
+                    if pixmap.size() != self.size():
+                        pixmap = pixmap.scaled(self.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
+                                               Qt.TransformationMode.FastTransformation)
+                    mask = QRegion(pixmap.mask())
                 if len(self._frames) >= 128:
                     self._frames.pop(next(iter(self._frames)))
-                self._frames[key] = pixmap, QRegion(pixmap.mask())
+                self._frames[key] = pixmap, mask
             self._pixmap, mask = self._frames[key]
+            if sys.platform == "darwin" and animated_art and pose != "peek":
+                # Cocoa applies the window shape independently of Qt presenting
+                # the next backing frame. Leave one logical point for the fur
+                # fringe and keep the previous drawing visible until repaint.
+                exact_mask = mask
+                previous = getattr(self, "_previous_art_mask", None)
+                if previous is not None:
+                    mask = mask.united(previous)
+                self._previous_art_mask = exact_mask
+                horizontal = mask.united(mask.translated(-1, 0)).united(mask.translated(1, 0))
+                mask = horizontal.united(horizontal.translated(0, -1)).united(horizontal.translated(0, 1))
+                mask = mask.intersected(QRegion(self.rect()))
+            else:
+                self._previous_art_mask = None
             if self.mask() != mask:
                 self.setMask(mask)
             self._frame_key = key
             self.update()
+
     def _tick(self, now: float | None = None) -> None:
         if self._latched or self._paused or self._user_hidden:
             return
@@ -2398,7 +3175,10 @@ class DesktopCat(QWidget):
             return
         area = self.available_area()
         if area != self._last_area and self.motion.state != "held":
+            previous_state = self.motion.state
             self.motion.constrain(area)
+            if previous_state == "land" and self.motion.state == "fall":
+                self._landing_elapsed = None
             self._last_area = area
         # Artwork follows elapsed active time even when a slow frame requires
         # limiting the physics step. Pause/latch update _last_time on resume.
@@ -2408,36 +3188,64 @@ class DesktopCat(QWidget):
                 self._cancel_habit()
             else:
                 self._habit_elapsed += dt
-                if self._habit_elapsed >= self._habit_duration:
+                if self._habit == "watch":
+                    cursor, center = QCursor.pos(), self.geometry().center()
+                    if abs(cursor.x()-center.x()) > 6:
+                        facing = 1 if cursor.x() > center.x() else -1
+                        if facing != self.motion.direction:
+                            self.motion.begin_turn(facing, "sit")
+                            self._cancel_habit()
+                if self._habit is not None and self._habit_elapsed >= self._habit_duration:
                     self._cancel_habit()
         elif (self._habits_enabled and self.motion.roaming and self.motion.state == "rest"
-              and not self.motion.sleeping and not self._pet_until and self._press_position is None):
+              and not self.motion.sleeping and not self._pet_until and self._press_position is None
+              and self._landing_elapsed is None):
             self._habit_in -= dt
             if self._habit_in <= 0:
                 self._choose_habit()
-        if self._landing_elapsed is not None:
+        if self._landing_elapsed is not None and self.motion.state != "land":
             self._landing_elapsed += dt
-            if self._landing_elapsed >= 3 * LAND_FRAME_SECONDS:
+            if self._landing_elapsed >= self.motion.landing_duration:
                 self._landing_elapsed = None
         if self.motion.state == "held" and now - self._drag_sample_time >= 0.08 - 1e-9:
             self._drag_speed *= math.exp(-8.0 * dt)
+            self._drag_sway *= math.exp(-7.0 * dt)
             if self._drag_speed < 0.5:
                 self._drag_speed = 0.0
         self._blink_in -= dt
         self._blink_left = max(0.0, self._blink_left - dt)
         if self._blink_in <= 0:
-            self._blink_left, self._blink_in = 0.14, self.rng.uniform(2.5, 6.0)
+            self._blink_left, self._blink_in = BLINK_SECONDS, self.rng.uniform(2.5, 6.0)
         # Small substeps keep collisions stable if an occasional UI frame is late.
+        was_landing = self.motion.state == "land"
         while dt > 0:
             step = min(dt, 1.0 / 120.0)
-            if self._press_position is None or self._dragging or self.motion.state in ("fall", "fly"):
-                was_flying = self.motion.state == "fly"
+            if (self._press_position is None or self._dragging
+                    or self.motion.state in ("fall", "fly", "land", "turn", "stand", "sit", "settle", "wake")):
+                was_walking, previous_x = self.motion.state == "walk", self.motion.x
                 impact = self.motion.step(step, area, self.rng,
-                                          autonomous=self._pet_until == 0 and self._habit is None)
-                if impact >= HARD_LANDING_SPEED or (was_flying and self.motion.state == "rest"):
+                                          autonomous=self._pet_until == 0 and self._habit is None
+                                          and self._landing_elapsed is None)
+                if not was_walking and self.motion.state == "walk":
+                    self._walk_phase = 0.0
+                if was_walking and self.motion.state == "walk":
+                    if self.animal_type in WALK_RIGS:
+                        stride = WALK_RIGS[self.animal_type]["stride"] / WALK_DUTY
+                        world_stride = stride * self.width() / SPRITE_CANVAS[0]
+                    else:
+                        # Crow's 8.112 art-pixel stance travels on a two-pixel
+                        # source grid before the selected size is applied.
+                        world_stride = 8.112 / 0.65 * 2 * self.width() / WIDTH
+                    self._walk_phase = (self._walk_phase +
+                        abs(self.motion.x-previous_x)/world_stride) % 1.0
+                if self.motion.state == "land":
+                    self._landing_elapsed = self.motion.transition_time
+                elif impact > 0:
                     self._landing_elapsed = 0.0
             dt -= step
-        if self._pet_until and self.motion.state not in ("held", "fall", "fly"):
+        if was_landing and self.motion.state != "land":
+            self._landing_elapsed = None
+        if self._pet_until and self.motion.state not in ("held", "fall", "fly", "land", "turn", "stand", "sit", "settle", "wake"):
             self.motion.state, self.motion.sleeping = PETTED, False
         # Anchor the impact poses to the floor while the small physical bounce
         # runs underneath, so the cat never squashes above the desktop.
@@ -2461,10 +3269,17 @@ class DesktopCat(QWidget):
         if self._latched or self._paused or self._user_hidden:
             return
         now = time.monotonic() if now is None else now
-        self._landing_elapsed = None
+        if self.motion.state != "land":
+            self._landing_elapsed = None
         self._cancel_habit()
+        if self.motion.sleeping:
+            self.motion.state, self.motion.turn_resume = "wake", PETTED
+            self.motion.transition_time = 0.0
         self.motion.sleeping = False
-        if self.motion.state not in ("held", "fall", "fly"):
+        if self.motion.state == "walk":
+            self.motion.state, self.motion.transition_time = "sit", 0.0
+            self.motion.sleep_after_sit = False
+        if self.motion.state not in ("held", "fall", "fly", "land", "turn", "stand", "sit", "settle", "wake"):
             self.motion.state, self.motion.vy = PETTED, 0.0
         self.motion.decision_in = self.rng.uniform(1.5, 3.0)
         self._pet_until = now + BUBBLE_SECONDS
@@ -2502,7 +3317,7 @@ class DesktopCat(QWidget):
             self._drag_offset = event.globalPosition() - QPointF(self.pos())
             self._drag_sample_position = QPointF(event.globalPosition())
             self._drag_sample_time = time.monotonic()
-            self._drag_speed = 0.0
+            self._drag_speed, self._drag_sway = 0.0, 0.0
         else:
             event.ignore()
 
@@ -2524,6 +3339,8 @@ class DesktopCat(QWidget):
             delta = global_position - self._drag_sample_position
             instantaneous = min(2400.0, math.hypot(delta.x(), delta.y()) / elapsed)
             self._drag_speed = self._drag_speed * 0.35 + instantaneous * 0.65
+            sway = max(-1.0, min(1.0, delta.x()/elapsed/700.0))
+            self._drag_sway = 0.65*self._drag_sway + 0.35*sway
             self._drag_sample_time = now
             self._drag_sample_position = QPointF(global_position)
             position = global_position - self._drag_offset
@@ -2545,7 +3362,7 @@ class DesktopCat(QWidget):
             if was_dragging:
                 self.display = QGuiApplication.screenAt(event.globalPosition().toPoint()) or self.display
                 self.motion.drop(self.available_area())
-                self._drag_speed = 0.0
+                self._drag_speed, self._drag_sway = 0.0, 0.0
                 if (self.animal_type == "Crow" and self.motion.roaming
                         and self.motion.y < self.motion.bounds(self.available_area())[3] - 25):
                     self.start_crow_flight()
@@ -2665,6 +3482,7 @@ class DesktopCat(QWidget):
             raise ValueError(f"Unknown animal type: {animal}")
         changed = self.animal_type != animal
         self.animal_type = animal
+        self.motion.walk_speed = _walking_speed(animal,self.width())
         if self.motion.state == "fly" and animal != "Crow":
             self.motion.drop(self.available_area())
         if changed and animal != "Cat" and self.palette_name == "Charcoal Grey":
@@ -2786,7 +3604,11 @@ class DesktopCat(QWidget):
             self._cancel_habit()
             if self.motion.state == "fly":
                 self.motion.flight_duration = min(self.motion.flight_duration, self.motion.flight_time + 1.6)
-        if self.motion.state not in ("held", "fall", "fly"):
+            elif self.motion.state == "turn":
+                self.motion.turn_resume = "sit"
+            elif self.motion.state == "walk":
+                self.motion.begin_rest(self.rng)
+        if self.motion.state not in ("held", "fall", "fly", "land", "turn", "stand", "sit", "settle", "wake"):
             if self._pet_until:
                 self.motion.state, self.motion.sleeping = PETTED, False
             else:
@@ -2835,9 +3657,20 @@ def run_smoke_test(cat: DesktopCat, app: QApplication, report_path: Path | None)
                 cat.set_animal_type(animal)
                 for size in SIZES:
                     cat.set_pet_size(size)
-                    assert cat._pixmap.size() == cat.size(), (animal, size)
+                    assert cat._pixmap.deviceIndependentSize().toSize() == cat.size(), (animal, size)
                     assert cat.motion.width == cat.width() and cat.motion.height == cat.height()
+                cat.motion.state = "walk"
+                cat._set_frame()
+                cat._walk_phase = 0.37
+                cat._set_frame()
+                assert not cat._pixmap.isNull(), animal
+                for pose in ("held","fall","land","groom","yawn","stretch","stand","sit","settle","wake"):
+                    for progress in (0.0,0.5,1.0):
+                        drawing = DRAWERS[animal](pose,0,1,palette=cat.palette,motion_phase=progress)
+                        assert not drawing.isNull() and not drawing.mask().isNull(), (animal,pose,progress)
             checks.append("all animals and sizes")
+            checks.append("pickup, contact, gestures and posture transition artwork")
+            checks.append("continuous walking artwork")
             cat.set_pet_size("Medium")
             cat.set_animal_type("Cat")
             cat.back_to_floor()

@@ -76,11 +76,16 @@ def render_frame(animal, pose, frame, **motion):
         image.constBits().asstring(image.sizeInBytes()),"raw","RGBA",image.bytesPerLine()).copy()
 
 
+def walk_period(animal):
+    rig = pet.WALK_RIGS[animal]
+    return rig["stride"] / pet.WALK_DUTY * pet.WIDTH / 400 / rig["speed"]
+
+
 def specifications():
     rows = [("Crow",[("rest",0,"PERCH",600)]+[("fly",i,f"FLIGHT {i+1:02}",55) for i in range(8)])]
     for animal in ("Cat","Dog","Fox"):
         frames = [("rest",0,"REST",600)]
-        frames += [("walk",i,f"WALK {i+1:02}",40) for i in (0,4,8,12)]
+        frames += [("walk",i,f"WALK {i+1:02}",round(1000*walk_period(animal)/16)) for i in (0,4,8,12)]
         frames += [("petted",0,"PETTED",90),("sleep",0,"SLEEP",800)]
         frames += [("groom",0,"GROOM",180),("watch",0,"WATCH",180)]
         rows.append((animal,frames))
@@ -90,7 +95,7 @@ def specifications():
 def animation_specifications():
     rows = specifications()[:1]
     for animal in ("Cat","Dog","Fox"):
-        poses = (("rest",1,600),("blink",1,140),("walk",16,40),
+        poses = (("rest",1,600),("blink",1,140),("walk",16,round(1000*walk_period(animal)/16)),
                  ("sleep",2,800),("held",6,50),("fall",6,50),("petted",6,80),
                  ("land",3,60),("groom",4,180),("yawn",4,180),("stretch",4,180),("watch",4,180))
         rows.append((animal,[(pose,i,pose.upper(),duration) for pose,count,duration in poses
@@ -98,32 +103,42 @@ def animation_specifications():
     return rows
 
 
+def preview_timeline(animal, fps, full=False):
+    """Sample the same pose durations as the desktop clock."""
+    seconds = pet.ASSET_ANIMATION_SECONDS
+    stages = [("rest", "IDLE", seconds["idle"], 1, 4),
+              ("blink", "BLINK", pet.BLINK_SECONDS, 1, 1),
+              ("walk", "WALK", walk_period(animal), 4 if full else 2, 16),
+              ("petted", "PETTED", seconds["pet"], 1, 6),
+              ("held", "HELD", seconds["air"], 1, 6),
+              ("fall", "FALL", seconds["air"], 1, 6),
+              ("land", "LANDING", 3 * pet.LAND_FRAME_SECONDS, 1, 3)]
+    if full:
+        stages += [(pose, pose.upper(), seconds["groom"] if pose == "groom" else duration,
+                    2 if pose == "groom" else 1, 4) for pose, duration in pet.HABIT_DURATIONS.items()]
+    stages.append(("sleep", "SLEEP", seconds["sleep"], 1 if full else 0.5, 2))
+    for pose, label, cycle, loops, count in stages:
+        # Keep columns in step while allowing each species its own walk cadence.
+        duration = (4.5 if full else 2.25) if pose == "walk" else cycle * loops
+        for tick in range(round(duration * fps)):
+            phase = (tick / fps / cycle) % 1
+            motion = {"motion_phase": phase}
+            if pose == "fall":
+                motion["stretch"] = 2
+            yield pose, min(count - 1, int(phase * count)), label, motion
+
+
 def export_animal_preview(output,animal):
-    # Compact GIF previews sample the continuous clocks at25fps. The companion
-    # MP4 preview and the desktop renderer show the full60Hz motion.
-    sequence = []
-    segments = (("rest","IDLE",2.4,2.4,4),("walk","WALK",1.28,.64,16),
-                ("petted","PETTED",.96,.48,6),("fall","AIRBORNE",.60,.30,6),
-                ("land","LANDING",.18,.18,3),("sleep","SLEEP",.60,3.6,2))
-    for pose,label,seconds,cycle,count in segments:
-        for tick in range(round(seconds*25)):
-            elapsed = tick/25
-            phase = (elapsed/cycle)%1.0
-            frame = min(count-1,int(phase*count))
-            motion = {"motion_phase":phase}
-            if pose == "fall": motion["stretch"] = 2
-            if pose == "land": motion["motion_phase"] = None
-            sequence.append((pose,frame,label,40,motion))
     native = (240,192)
     images,durations = [],[]
-    for pose,i,label,duration,motion in sequence:
+    for pose,i,label,motion in preview_timeline(animal,25):
         canvas = Image.new("RGB",(native[0]+64,native[1]+72),"#faf2e7")
         bitmap_text(canvas,f"{animal.upper()} - {label}",(24,14),2,"#70533f")
         sprite = render_frame(animal,pose,i,**motion)
         sprite = sprite.resize(native,Image.Resampling.LANCZOS)
         canvas.paste(sprite,(32,48),sprite)
         images.append(canvas)
-        durations.append(duration)
+        durations.append(40)
     path = output/f"{animal.lower()}-animations.gif"
     images[0].save(path,save_all=True,append_images=images[1:],duration=durations,
                    loop=0,disposal=2,optimize=True)

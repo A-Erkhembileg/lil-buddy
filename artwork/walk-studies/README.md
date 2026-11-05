@@ -1,0 +1,7 @@
+# Walk studies
+
+The cat and fox sheets are the approved redraws from the earlier design review. The husky sheet was created with built-in image generation using the original husky character sheet and a side-view walking reference. All three sheets are arranged in row-major order in a four-by-four grid.
+
+## Husky generation prompt
+
+Use case: identity-preserve. Redraw the approved blue-eyed charcoal-and-white husky of image 1 as a 16-frame production walk cycle for a pixel-art desktop pet. Image 2 supplies side-view canine walking anatomy only. One identical full-body adult husky facing RIGHT in every cell. Keep the distinctive white mask, dark back, white chest and feet, upright ears, blue eye, fluffy cream-tipped curled tail. Exactly four columns and four rows, evenly spaced same-size imaginary square cells. Strict side view, level torso, neck forward, gentle weight transfer at shoulders and hips, true canine hind knee and backward hock. Show one seamless consecutive four-beat WALK, frame 1 near hind touchdown, 5 near fore, 9 far hind, 13 far fore. Track each planted paw steadily backward with short low arcing swing and subtle delayed tail motion. At least two supporting paws. No running, duplicates or viewpoint shifts. Match crisp outlined, shaded pixel clusters of image 1. Center the dog's body at same anchor in every cell, common floor at 85% cell height. Generous clear margins on all sides of each dog so no clipping, no overlaps. Real transparent background without shadows, ground, grid, numbers or text.
