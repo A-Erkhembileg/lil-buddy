@@ -65,6 +65,8 @@ PETTED = "petted"
 AIR_FRAME_SECONDS = 0.065
 CROW_FLAP_SECONDS = 0.055
 BLINK_SECONDS = 0.16
+IDLE_SECONDS = 5.6
+PET_REACTION_SECONDS = 1.65
 LAND_FRAME_SECONDS = 0.06
 HARD_LANDING_SPEED = 420.0
 SIZES = {"Small": 2, "Medium": 3, "Large": 4}
@@ -1363,6 +1365,7 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
     # Anticipation / reach / quiet hold / recovery, shared by intentional acts.
     gesture=ease(progress/0.3)*(1-ease((progress-0.68)/0.32))
     happy=pose in ("petted","pet")
+    perched=pose in ("rest","idle","blink")
     flying=pose=="fly"
     falling=pose=="fall"
     held=pose=="held"
@@ -1370,13 +1373,49 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
     if landing and motion_phase is None:
         progress=(0.22,0.62,1.0)[min(2,int(frame))]
     compression=(3*ease(progress/0.18)*(1-ease((progress-0.18)/0.65))) if landing else 0
-    bob=(0,-1,0,1)[phase%4] if pose=="walk" else breath
-    if happy:bob+=(0,-1,0,1)[phase%4]
+    bob=breath
+    head_x,head_y,head_angle,tail_flick=0,0,0,0
+    bow=0.0
+    if perched:
+        # A quick inspection holds at its peak. The tail tips follow the head
+        # instead of every part of the bird shifting on the same beat.
+        glance=_gesture(min(1.0,progress/.80),.12,.25,.59)
+        settle=_gesture(progress,.53,.63,.70)
+        bob-=round(0.85*math.sin(math.pi*progress)**4)
+        head_x=-round(1.5*glance)
+        head_y=-round(glance)
+        head_angle=round(-10*glance+3*settle)
+        tail_flick=-round(2*settle)
+    elif pose=="watch":
+        gaze=max(-1,min(1,dangle))
+        head_x=-round(gesture)
+        head_y=round((gaze-1)*gesture)
+        head_angle=round(10*(gaze-.3)*gesture)
+        tail_flick=-round(_gesture(progress,.35,.47,.64))
+    elif pose=="walk":
+        walk_phase=(motion_phase if motion_phase is not None else phase/4)%1.0
+        step=(walk_phase*2)%1.0
+        reach=ease(step/.22)*(1-ease((step-.25)/.75))
+        bob=-round(math.sin(math.pi*step)**2)
+        head_x=-round(2*(1-reach))
+    elif happy:
+        if motion_phase is None:
+            progress=phase/4
+        # Bow into the touch, close the eye at the peak, and ease back to perch.
+        bow=_gesture(min(1.0,progress/.90),.04,.27,.59)
+        bob=round(2*bow)
+        head_x=-round(bow)
+        head_y=round(bow)
+        head_angle=round(9*bow)
+        tail_flick=-round(2*_gesture(progress,.22,.42,.58))
     if pose=="sleep":
-        g.poly([(9,38),(17,31),(27,28),(38,30),(44,36),(43,43),(37,47),(18,47)],c["ink"])
-        g.poly([(13,38),(19,32),(28,29),(37,31),(42,36),(41,42),(36,45),(20,46)],c["fur"])
-        g.poly([(19,36),(25,32),(34,33),(39,37),(34,43),(22,44),(16,41)],c["shade"])
-        g.line([(22,35),(29,35),(35,38),(31,42)],c["highlight"])
+        inhale=math.sin(math.pi*progress)**2
+        rise=round(1.6*inhale)
+        feathers=round(.8*inhale)
+        g.poly([(9,38),(17,31-feathers),(27,28-rise),(38,30),(44,36),(43,43),(37,47),(18,47)],c["ink"])
+        g.poly([(13,38),(19,32-feathers),(28,29-rise),(37,31),(42,36),(41,42),(36,45),(20,46)],c["fur"])
+        g.poly([(19,36),(25,32-feathers),(34,33),(39,37),(34,43),(22,44),(16,41)],c["shade"])
+        g.line([(22,35-feathers),(29,35-feathers),(35,38),(31,42)],c["highlight"])
         g.box(33,32,4,1,c["light"])
         return g.finish(direction)
     body_y=round(compression) if landing else round(math.sin(math.pi*progress)) if pose=="turn" else 2 if held else 0 if flying or falling else bob
@@ -1390,14 +1429,15 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
         g.p.save();g.p.translate(0,body_y)
         _crow_wing(g,wing_frame,c,True,fold)
         g.p.restore()
-    tail_y=body_y-pitch
-    if held:tail_y+=(0,0,1,1,1,0,0,0)[phase]
+    tail_root=body_y-pitch
+    if held:tail_root+=(0,0,1,1,1,0,0,0)[phase]
+    tail_y=tail_root+tail_flick
     # Original tail, coat polygons, markings and face retain their dimensions.
-    g.poly([(24,31+tail_y),(17,31+tail_y),(6,35+tail_y),(4,38+tail_y),
-            (8,39+tail_y),(10,37+tail_y),(10,40+tail_y),(14,39+tail_y),(23,35+tail_y)],c["ink"])
-    g.poly([(22,32+tail_y),(16,33+tail_y),(7,36+tail_y),(7,37+tail_y),(14,36+tail_y),
-            (13,38+tail_y),(20,35+tail_y)],c["shade"])
-    g.line([(17,33+tail_y),(9,37+tail_y)],c["highlight"])
+    g.poly([(24,31+tail_root),(17,31+tail_root),(6,35+tail_y),(4,38+tail_y),
+            (8,39+tail_y),(10,37+tail_y),(10,40+tail_y),(14,39+tail_y),(23,35+tail_root)],c["ink"])
+    g.poly([(22,32+tail_root),(16,33+tail_root),(7,36+tail_y),(7,37+tail_y),(14,36+tail_y),
+            (13,38+tail_y),(20,35+tail_root)],c["shade"])
+    g.line([(17,33+tail_root),(9,37+tail_y)],c["highlight"])
     g.poly([(18,27+body_y),(24,22+body_y),(33,20+body_y),(40,23+body_y),
             (42,28+body_y),(38,35+body_y),(31,39+body_y),(23,37+body_y),(18,33+body_y)],c["ink"])
     g.poly([(20,27+body_y),(25,23+body_y),(33,21+body_y),(39,24+body_y),
@@ -1441,9 +1481,8 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
             lift=0
             if pose=="walk":
                 # A stance moves backwards at the exact speed of the window.
-                walk_phase=(motion_phase if motion_phase is not None else phase/4)+index*0.5
                 stride=8.112  # 48 logical px/s * .52 s * .65 stance / two px per art pixel
-                local=walk_phase%1
+                local=(walk_phase+index*.5)%1.0
                 if local<0.65:x+=round(stride*(0.5-local/0.65))
                 else:
                     swing=(local-0.65)/0.35
@@ -1469,13 +1508,19 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
             g.line([(x+1,foot_y-1),(x-3,foot_y)],c["ink"])
             g.box(x+5,foot_y,2,1,c["ink"])
             g.box(x-3,foot_y,1,1,c["ink"])
-    hx=-round(gesture) if pose in ("groom","preen") else (0,1,0,-1)[phase%4] if happy else 0
-    hy=-round(4*gesture) if pose in ("groom","preen") else body_y+pitch
-    if pose=="yawn":hy-=round(2*gesture)
-    if pose=="watch":hy+=max(-1,min(1,dangle))
-    g.p.save();g.p.translate(hx,hy)
+    head_y+=body_y+pitch
     if pose in ("groom","preen"):
-        g.p.translate(40,24);g.p.rotate(round(130*gesture));g.p.translate(-40,-24)
+        head_x=-round(gesture)
+        head_y=-round(4*gesture)
+        head_angle=round(130*gesture)
+    elif pose=="yawn":
+        head_y-=round(2*gesture)
+    g.p.save()
+    g.p.translate(head_x,head_y)
+    if head_angle:
+        g.p.translate(40,24)
+        g.p.rotate(head_angle)
+        g.p.translate(-40,-24)
     g.poly([(34,24),(36,18),(40,14),(45,14),(49,17),(50,20),(55,22),
             (59,25),(59,26),(51,27),(47,28),(43,30),(37,28)],c["ink"])
     g.poly([(36,24),(38,19),(41,15),(45,15),(48,18),(49,21),(53,23),
@@ -1484,7 +1529,8 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
     g.line([(50,23),(56,25)],c["highlight"])
     g.line([(39,18),(43,16),(46,17)],c["highlight"])
     g.line([(38,24),(41,26),(44,27)],c["cream"])
-    if pose in ("blink","petted","pet","groom","preen") or (pose=="yawn" and gesture>0.35):
+    if (pose in ("blink","groom","preen") or bow>.5
+            or (pose=="yawn" and gesture>.35)):
         g.line([(44,20),(47,20)],c["light"])
     else:
         g.box(45,19+max(-1,min(1,dangle)),2,2,c["eye"])
@@ -1494,7 +1540,11 @@ def draw_crow(pose, frame, direction, tail_offset=0, breath=0, dangle=0,
         g.poly([(50,25),(58,26),(51,26+gap),(48,26+gap)],c["ink"])
         if gap:g.box(50,26,3,gap,c["pink"])
     g.p.restore()
-    if happy:g.heart(12+phase,11-phase);g.heart(51,6+phase%2)
+    if happy:
+        for x,y,appear,leave in ((13,15,.13,.69),(51,13,.27,.81)):
+            if appear<=progress<leave:
+                drift=(progress-appear)/(leave-appear)
+                g.heart(x+round(3*drift),y-round(10*drift))
     if pose=="turn":
         # The short turn projects toward an end-on view before facing changes.
         # Sample on the original integer grid: no blur, fading or double limbs.
@@ -1728,7 +1778,7 @@ def _legacy_sprite_bases(animal):
 
 _MOTION_BASES = {}
 ASSET_ANIMATION_SECONDS = {
-    "idle": 3.0, "pet": 1.28, "air": 0.72,
+    "idle": IDLE_SECONDS, "pet": PET_REACTION_SECONDS, "air": 0.72,
     "sleep": 3.6, "groom": 1.0, "watch": HABIT_DURATIONS["watch"],
 }
 
@@ -1843,7 +1893,7 @@ WALK_FLOOR = 318.0
 # connected at fixed joints; independently generated poses are never mixed.
 WALK_RIGS = {
     "Cat": {
-        "frame": 6, "stride": 48.0, "lift": 12.0, "body_drop": 12.0, "speed": 19.0,
+        "frame": 6, "stride": 48.0, "lift": 18.0, "body_drop": 12.0, "speed": 19.0,
         "body": ((0,0),(400,0),(400,216),(345,216),(320,232),(299,237),
                  (294,222),(245,220),(231,228),(204,229),(183,237),
                  (166,242),(139,242),(122,227),(109,215),(0,215)),
@@ -1861,7 +1911,7 @@ WALK_RIGS = {
         },
     },
     "Dog": {
-        "frame": 0, "stride": 62.0, "lift": 13.0, "body_drop": 13.0, "speed": 25.0,
+        "frame": 0, "stride": 62.0, "lift": 21.0, "body_drop": 13.0, "speed": 25.0,
         "body": ((0,0),(400,0),(400,225),(300,225),(291,230),(267,234),
                  (248,236),(222,230),(203,229),(185,231),(171,227),
                  (156,220),(146,214),(131,220),(112,230),(92,232),
@@ -1882,7 +1932,7 @@ WALK_RIGS = {
         },
     },
     "Fox": {
-        "frame": 6, "stride": 38.0, "lift": 10.0, "body_drop": 9.0, "speed": 16.5,
+        "frame": 6, "stride": 38.0, "lift": 15.0, "body_drop": 9.0, "speed": 16.5,
         "body": ((0,0),(400,0),(400,229),(333,229),(320,238),(303,245),
                  (283,248),(268,246),(251,240),(228,238),(208,242),
                  (194,248),(174,249),(151,246),(135,240),(126,232),
@@ -1983,15 +2033,20 @@ def _walk_textures(animal, palette):
     return _WALK_TEXTURES[key]
 
 
+def _walk_body_drop(rig, phase):
+    step = math.sin(phase*math.tau*2)
+    # Weight settles down into each step, leaving reach for the extended paw.
+    return rig["body_drop"] + 0.45*step + 2.8*step**2
+
+
 def _walk_leg_pose(animal, name, phase, far=False):
     rig = WALK_RIGS[animal]
     limb = rig["limbs"][name]
     # A four-beat walk: same-side hind, fore, opposite hind, fore. Far legs
     # attach a little behind the visible side, rather than fanning sideways.
     offset = (0.25 if name == "fore" else 0.0) + (0.5 if far else 0.0)
-    bob = math.sin(phase*math.tau*2)*0.45
     side_x, side_y = (13.0,-3.0) if far else (0.0,0.0)
-    root = limb["root"][0]+side_x, limb["root"][1]+bob+rig["body_drop"]
+    root = limb["root"][0]+side_x, limb["root"][1]+_walk_body_drop(rig, phase)
     center = limb["root"][0]+side_x-2.0
     target_x,target_y,contact = _walk_foot(phase-offset,center,
         limb["ankle"][1]+WALK_FLOOR-limb["sole"]+side_y,rig["stride"],rig["lift"])
@@ -2025,8 +2080,8 @@ def _standing_geometry(animal, action, phase, dangle=0, stretch=0):
     if action == "stretch":
         amount = _gesture(phase,0.08,0.40,0.69)
         angle, dx, dy = 23*amount, {"Cat":-25,"Dog":-15,"Fox":-20}[animal]*amount, rig["body_drop"]-8*amount
-        head_angle = 0.0
-        tail_angle = 0.0
+        head_angle = -8*amount
+        tail_angle = 5*_gesture(phase, 0.14, 0.53, 0.75)
     elif action == "land":
         # Contact -> deceleration -> restrained rebound -> settled stance.
         compression = (_ease(phase/0.25) if phase < 0.25 else
@@ -2034,8 +2089,8 @@ def _standing_geometry(animal, action, phase, dangle=0, stretch=0):
                        -0.10*math.sin(math.pi*(phase-0.68)/0.32))
         dy += 18*compression
         angle = 3*compression
-        head_angle = -4*compression
-        tail_angle = 5*math.sin(math.pi*phase)**2*(1-phase)
+        head_angle = -5*compression
+        tail_angle = 9*_gesture(phase, 0.08, 0.34, 0.43)
     elif action in ("held","fall"):
         settle = _ease(phase/0.60)
         angle = -3.5*settle if action == "held" else -3*(1-settle)
@@ -2044,14 +2099,17 @@ def _standing_geometry(animal, action, phase, dangle=0, stretch=0):
         hip = rig["limbs"]["fore"]["root"]
         dy = 3
         dx = 0
-        head_angle = -angle*0.55
-        tail_angle = (6*math.sin(phase*math.pi*2.3)*math.exp(-phase*4)
-                      + max(-4,min(4,dangle*2)))
+        head_angle = -angle*0.65
+        if action == "held":
+            tail_angle = (17*math.sin(phase*math.pi*2)*math.exp(-phase*3)
+                          + max(-9,min(9,dangle*3)))
+        else:
+            tail_angle = 8*(1-settle)
     elif action == "turn":
         amount = math.sin(math.pi*phase)**2
         dy += 5*amount
-        head_angle = -7*amount
-        tail_angle = 7*amount
+        head_angle = -8*_gesture(phase, 0.02, 0.28, 0.52)
+        tail_angle = 8*_gesture(phase, 0.18, 0.55, 0.71)
     def body_point(point):
         rad = math.radians(angle)
         x,y = point[0]-hip[0],point[1]-hip[1]
@@ -2117,11 +2175,13 @@ def _articulated_image(animal, action, phase, palette, dangle=0, stretch=0):
     image.fill(Qt.GlobalColor.transparent)
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-    hip = rig["limbs"]["hind"]["root"]
+    pivot = rig["limbs"]["fore" if action in ("held", "fall") else "hind"]["root"]
     if action == "walk":
-        bob = math.sin(phase*math.tau*2)*0.65
-        body_point = lambda p: (p[0],p[1]+rig["body_drop"]+bob)
-        angle,head_angle,tail_angle = 0.0,math.sin(phase*math.tau*2-.5)*0.6,math.sin(phase*math.tau-.7)*1.4
+        drop = _walk_body_drop(rig, phase)
+        body_point = lambda p: (p[0], p[1]+drop)
+        angle = 0.0
+        head_angle = 3*math.sin(phase*math.tau*2-0.5)
+        tail_angle = 12*math.sin(phase*math.tau-0.7)
         legs = {(n,f):_walk_leg_pose(animal,n,phase,f) for n in rig["limbs"] for f in (True,False)}
     else:
         body_point,angle,head_angle,tail_angle,legs = _standing_geometry(animal,action,phase,dangle,stretch)
@@ -2151,34 +2211,20 @@ def _articulated_image(animal, action, phase, palette, dangle=0, stretch=0):
         painter.scale(limb.get("paw_width",1.0),1.0)
         painter.drawImage(QPointF(-paw_limb["ankle"][0],-paw_limb["ankle"][1]),textures[paw_name,far][2])
         painter.restore()
-    def rigid(texture, pivot, extra=0):
-        target = body_point(pivot)
-        painter.save()
-        painter.translate(*target)
-        painter.rotate(angle+extra)
-        painter.drawImage(QPointF(-pivot[0],-pivot[1]),texture)
-        painter.restore()
     for name in ("hind","fore"):
         leg(name,True)
     for name in ("hind","fore"):
         leg(name,False)
-    # Keep the complete torso/head/tail illustration rigid. Splitting an
-    # outlined drawing at the collar can expose seams during a deep bow; this
-    # intact volume preserves markings, facial features and the full silhouette.
+    # Bend the continuous painting at the neck and tail. The leg roots sit
+    # below the deformation, where the body and leg textures meet.
     body_image = textures["body"]
-    # Tiny, delayed tail response is confined to the painted tail landmark.
-    # Head and torso offsets are zero: faces and body volume remain rigid.
-    if action=="held":
-        follow=3*math.sin(phase*math.pi*2.3)*math.exp(-phase*4)+max(-2,min(2,dangle*.7))
-    elif action=="land":
-        follow=2*math.sin(phase*math.pi*2)*math.sin(phase*math.pi)*(1-phase)
-    elif action=="walk":
-        follow=1.6*math.sin(phase*math.tau-.7)
-    else:
-        follow=1.2*math.sin(phase*math.pi*2)*math.sin(phase*math.pi)
-    if abs(follow)>.01:
-        body_image=_deform_action(body_image,animal,"stretch",((follow,-follow*.25),(0,0),(0,0),(0,0)))
-    rigid(body_image,hip)
+    follow = tail_angle*_ANIMATION_STYLE[animal][0]
+    if abs(follow) > .01 or abs(head_angle) > .01:
+        body_image = _deform_action(body_image, animal, "standing",
+                                    ((follow, -0.45*follow), (0, 0)), head_angle)
+    painter.translate(*body_point(pivot))
+    painter.rotate(angle)
+    painter.drawImage(QPointF(-pivot[0], -pivot[1]), body_image)
     painter.end()
     return image
 
@@ -2191,21 +2237,31 @@ def _walk_image(animal, phase, palette):
 # tapers into the surrounding fur. The floor is pinned for seated poses.
 #                   tail tip  face     chest     forward paw  rear paw
 _ACTION_LANDMARKS = {
-    "Cat": {"idle": ((91,130),(283,94),(239,195)), "pet": ((89,149),(278,108),(244,202)),
+    "Cat": {"idle": ((91,130),(283,94),(239,195),(220,49)), "pet": ((89,149),(278,108),(244,202)),
             "air": ((65,53),(306,91),(235,170),(342,236),(88,267),(153,291)),
             "sleep": ((175,274),(265,211),(158,177)),
             "groom": ((111,185),(251,145),(240,233),(278,207)),
+            "standing": ((73,75),(314,94)),
             "stretch": ((82,95),(318,88),(263,191),(279,298))},
-    "Dog": {"idle": ((126,187),(260,101),(247,195)), "pet": ((116,178),(261,99),(243,192)),
+    "Dog": {"idle": ((126,187),(260,101),(247,195),(216,40)), "pet": ((116,178),(261,99),(243,192)),
             "air": ((87,72),(279,86),(223,179),(290,284),(41,264),(118,280)),
             "sleep": ((179,284),(250,202),(155,182)),
             "groom": ((115,222),(212,165),(208,238),(201,229)),
+            "standing": ((102,91),(296,94)),
             "stretch": ((102,91),(296,94),(245,188),(263,296))},
-    "Fox": {"idle": ((132,104),(270,91),(250,191)), "pet": ((122,101),(271,89),(247,184)),
+    "Fox": {"idle": ((132,104),(270,91),(250,191),(239,36)), "pet": ((122,101),(271,89),(247,184)),
             "air": ((116,78),(286,77),(241,181),(294,241),(195,287),(228,279)),
             "sleep": ((243,256),(268,178),(146,159)),
             "groom": ((91,103),(283,115),(241,206),(331,172)),
+            "standing": ((109,57),(312,92)),
             "stretch": ((113,56),(312,92),(264,203),(302,298))},
+}
+
+# Tail amplitude, idle head pitch, and direction of the petting lean.
+_ANIMATION_STYLE = {
+    "Cat": (1.0, 3.0, (3, 12)),
+    "Dog": (1.25, -4.0, (8, 8)),
+    "Fox": (0.85, -5.0, (-4, -9)),
 }
 
 # Open and closed eye centres from the matching idle and petting drawings.
@@ -2253,9 +2309,8 @@ def _action_motion(animal, action, phase, dangle, stretch):
     theta = phase*math.tau
     wave, follow = math.sin(theta), math.sin(theta-0.6)
     lift = (1-math.cos(theta))*0.5
-    wag = {"Cat": 1.0, "Dog": 1.35, "Fox": 0.78}[animal]
     if action == "sleep":
-        return ((0,0),(0,-0.4*wave),(0,-1.6*wave))
+        return ((0,0),(0,-1.1*lift),(0,-4.0*lift))
     if action == "groom":
         return ((5*follow,-2*follow),(3.5*wave,5*wave),(1.4*wave,1.5*wave),
                 (5*follow,-8*follow))
@@ -2268,20 +2323,40 @@ def _action_motion(animal, action, phase, dangle, stretch):
         return ((9*follow,-4*follow),(-2.3*wave,-1.7*follow),
                 (-1.5*wave,-1.8*speed_stretch),(20*wave,-8*lift-1+speed_stretch),
                 (-18*wave,-7*(1-lift)),(15*wave,-6*lift))
-    if action == "pet":
-        return ((15*wag*follow,-5*follow),(-8*lift,6*lift),(-2.5*lift,2*lift))
-    if action == "watch":
-        return ((7*wag*follow,-2*follow),(2.3*wave,6*dangle-2*lift),(1.5*wave,-2*lift))
     if action == "yawn":
         return ((4*follow,-2*follow),(-4*lift,-10*lift),(0,-4*lift))
     if action == "land":
         # Compress immediately on impact, rebound, then settle to neutral.
         compression = math.sin(phase*math.pi*1.8)*math.sin(phase*math.pi)*(1-phase)*3.0
         return ((-4*compression,6*compression),(0,17*compression),(0,10*compression))
-    # Long quiet holds. The tail tip responds after a small breathing movement.
-    breath = math.sin(theta)*0.45
-    tip = _gesture(phase,.34,.48,.57)
-    return ((2.0*wag*tip,-0.8*tip),(0,-breath),(0,-1.2*breath))
+    return ((0, 0), (0, 0), (0, 0))
+
+
+def _seated_motion(animal, action, phase, dangle):
+    wag, pitch, (lean_x, lean_y) = _ANIMATION_STYLE[animal]
+    if action == "pet":
+        lean = _gesture(phase, 0.02, 0.27, 0.56)
+        follow = _gesture(phase, 0.11, 0.32, 0.64)
+        wag_count = 2.5 if animal == "Dog" else 1
+        tail = 19*wag*follow*math.sin(phase*math.tau*wag_count)
+        return ((tail, -0.45*tail), (lean_x*lean, lean_y*lean),
+                (2*lean, 4*lean), (0, -3*follow)), 5*lean, lean
+    if action == "watch":
+        look = _gesture(phase, 0, 0.22, 0.63)
+        tail = 9*wag*_gesture(phase, 0.16, 0.41, 0.63)
+        tilt = look*(4*dangle-2)
+        return ((tail, -0.45*tail), (5*look, 5*dangle*look),
+                (2*look, -look), (0, -4*look)), tilt, 0
+
+    # A quick ear flick leads a held head pose. The tail settles after the head.
+    breath = 2*(1-math.cos(math.tau*2*phase))
+    ear = _gesture((phase-0.21)/0.19, 0, 0.25, 0.36)
+    look = _gesture(phase, 0.27, 0.40, 0.57)
+    swish = _gesture((phase-0.36)/0.39, 0, 0.36, 0.46)
+    counter = _gesture((phase-0.68)/0.24, 0, 0.36, 0.43)
+    tail = wag*(15*swish-6*counter)
+    return ((tail, -0.48*tail), (3*look, -breath*0.55),
+            (0, -breath), (-6*ear, -7*ear)), pitch*look, 0
 
 
 @functools.lru_cache(maxsize=24)
@@ -2293,10 +2368,17 @@ def _action_mesh(animal, rig):
     for y in range(0,321,32):
         for x in range(0,401,40):
             weights = []
-            for (cx,cy), (rx,ry) in zip(points,radii):
-                weight = max(0,1-((x-cx)/rx)**2-((y-cy)/ry)**2)
-                weights.append(weight*weight*(3-2*weight))
-            if rig not in ("air","stretch"):
+            for index, ((cx,cy), (rx,ry)) in enumerate(zip(points,radii)):
+                if rig == "idle" and index == 3:
+                    rx, ry = 59, 67
+                radial = ((x-cx)/rx)**2+((y-cy)/ry)**2
+                # Move the face together, with a wider taper at its boundary.
+                weights.append(_ease((1-radial)/0.56) if index == 1 and rig in ("idle", "standing")
+                               else _ease(1-radial))
+            if rig == "standing":
+                pin = _ease((202-y)/40)
+                weights = [w*pin for w in weights]
+            elif rig not in ("air","stretch"):
                 pin = max(0,min(1,(310-y)/38))
                 weights = [w*pin for w in weights]
             vertices.append((x,y,weights))
@@ -2311,16 +2393,24 @@ def _action_mesh(animal, rig):
     return vertices, tiles
 
 
-def _deform_action(source, animal, rig, offsets):
+def _deform_action(source, animal, rig, offsets, head_angle=0):
     # Each destination tile samples one continuous patch of the original
     # drawing. Clip in destination coordinates to avoid cracks or overlapping fur.
     vertices, tiles = _action_mesh(animal,rig)
+    angle = math.radians(head_angle)
+    sin_angle, cos_angle = math.sin(angle), math.cos(angle)
+    neck_x, neck_y = _ACTION_LANDMARKS[animal][rig][1]
+    neck_y += 49
     samples = []
     for x,y,weights in vertices:
         dx, dy = 0.0, 0.0
         for weight,(ox,oy) in zip(weights,offsets):
             dx += weight*ox
             dy += weight*oy
+        if head_angle:
+            rx, ry = x-neck_x, y-neck_y
+            dx += weights[1]*(rx*(cos_angle-1)-ry*sin_angle)
+            dy += weights[1]*(rx*sin_angle+ry*(cos_angle-1))
         samples.append(QPointF(x-dx,y-dy))
     image = QImage(*SPRITE_CANVAS,QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
@@ -2339,12 +2429,25 @@ def _deform_action(source, animal, rig, offsets):
 
 
 def _key_transition(animal, pose, phase, palette):
-    _,clips = _sprite_bases(animal)
+    _, clips = _sprite_bases(animal)
     indices = clips.get("transition_"+pose)
     if indices is None:
         raise RuntimeError(f"Missing {animal} {pose} transition artwork; reinstall the complete app.")
-    phase = _ease(phase)
-    return _sprite_tinted(animal,indices[min(len(indices)-1,round(phase*(len(indices)-1)))],palette)
+    last = len(indices)-1
+    index = round(_ease(phase)*last)
+    if index == 0 or index == last:
+        # Use the live pose at each join. The baked PNG and the live renderer
+        # can round translucent edge colors differently on Windows.
+        start, end = {
+            "stand": ("idle", "standing"), "sit": ("standing", "idle"),
+            "settle": ("idle", "sleep"), "wake": ("sleep", "idle"),
+            "groom": ("idle", "groom"), "ungroom": ("groom", "idle"),
+        }[pose]
+        target = start if index == 0 else end
+        if target == "standing":
+            return _articulated_image(animal, "land", 1, palette)
+        return _sprite_tinted(animal, clips[target][0], palette)
+    return _sprite_tinted(animal, indices[index], palette)
 
 
 def _groom_image(animal, phase, palette):
@@ -2432,36 +2535,49 @@ def animal_frame_image(animal, pose, frame, direction=1, tail_offset=0, breath=0
             image = turned
     else:
         _bases, clips = _sprite_bases(animal)
-        action = {"held":"air","fall":"air","petted":"pet","rest":"idle","blink":"idle"}.get(pose,pose)
-        rig = "idle" if action in ("watch","land","yawn") else action
-        clip = "walk" if rig == "stretch" else rig
-        indices = clips.get(clip,clips["rest"])
+        action = {"petted": "pet", "rest": "idle", "blink": "idle"}.get(pose, pose)
+        seated = action in ("idle", "pet", "watch")
+        rig = "idle" if seated else action
+        indices = clips.get(rig, clips["rest"])
         phase = motion_phase
         if phase is None:
-            count = 6 if action == "air" else 3 if action == "land" else 4
+            count = 6 if action == "air" else 4
             phase = frame%count/count
-        if action in ("land","stretch","yawn"):
+            if action == "pet":
+                phase = 0.10 + 0.20*(frame%4)
+        if action in ("pet", "watch"):
             phase = max(0.0,min(1.0,phase))
         else:
             phase %= 1.0
         source = _sprite_tinted(animal,indices[0],palette)
-        if pose in ("blink","yawn"):
-            # During a blink the body continues on its independent idle clock.
-            eyelid = (1.0 if motion_phase is None else math.sin(math.pi*phase)**2) if pose == "blink" else math.sin(math.pi*phase)**2
-            if eyelid > 0.001:
-                closed = _sprite_tinted(animal,clips["pet"][0],palette)
-                source = _expression_image(animal,source,closed,eyelid,eyelid if pose == "yawn" else 0)
-            if pose == "blink":
-                phase = tail_offset
-        offsets = _action_motion(animal,action,phase,dangle,stretch)
-        image = _deform_action(source,animal,rig,offsets)
-        if effects and action == "pet":
+        if pose == "blink":
+            eyelid = 1.0 if motion_phase is None else _gesture(phase, 0, 0.33, 0.41)
+            # The eyelids travel on a separate clock from the seated body.
+            phase = tail_offset
+        else:
+            eyelid = 0
+        if seated:
+            offsets, head_angle, lean = _seated_motion(animal, action, phase, dangle)
+            if action == "pet":
+                eyelid = _ease(1.8*lean)
+        else:
+            offsets, head_angle = _action_motion(animal,action,phase,dangle,stretch), 0
+        if eyelid > 0.001:
+            closed = _sprite_tinted(animal, clips["pet"][0], palette)
+            source = _expression_image(animal, source, closed, eyelid, 0)
+        image = (_deform_action(source, animal, rig, offsets, head_angle)
+                 if head_angle or any(x or y for x, y in offsets) else source)
+        if effects and action == "pet" and 0.05 < phase < 0.94:
+            image = image.copy()
             painter = QPainter(image)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor("#d77c9d"))
-            drift = math.sin(phase*math.tau)
-            for hx,hy in ((45+drift*4,34-drift*5),(350-drift*3,54+drift*4)):
-                hx,hy = round(hx),round(hy)
+            for x, y, start in ((49, 83, 0.05), (349, 75, 0.24)):
+                travel = (phase-start)/0.70
+                if not 0 < travel < 1:
+                    continue
+                painter.setOpacity(_ease(13*travel)*_ease(3.5*(1-travel)))
+                hx, hy = round(x+7*travel), round(y-43*travel)
                 painter.drawPolygon(QPolygon([QPoint(hx,hy+4),QPoint(hx+4,hy),
                     QPoint(hx+8,hy+4),QPoint(hx+12,hy),QPoint(hx+16,hy+4),
                     QPoint(hx+16,hy+9),QPoint(hx+8,hy+17),QPoint(hx,hy+9)]))
@@ -3039,15 +3155,17 @@ class DesktopCat(QWidget):
 
         animated_art = self.animal_type in ("Cat", "Dog", "Fox")
         motion_phase = None
+        group = ("idle" if pose in ("rest", "blink") else
+                 "pet" if pose in ("pet", "petted") else pose)
+        kind = self.animal_type, group
+        if kind != self._pose_clock_kind:
+            self._pose_clock_kind = kind
+            self._pose_clock_started = self._animation_time
+        elapsed = max(0.0, self._animation_time-self._pose_clock_started)
+        if group == "pet":
+            # The reaction plays once while the speech bubble keeps its own deadline.
+            motion_phase = min(1.0, elapsed/PET_REACTION_SECONDS)
         if animated_art:
-            group = ("held" if pose == "held" else "fall" if pose == "fall" else
-                     "idle" if pose in ("rest", "blink") else
-                     "pet" if pose in ("pet", "petted") else pose)
-            kind = self.animal_type, group
-            if kind != self._pose_clock_kind:
-                self._pose_clock_kind = kind
-                self._pose_clock_started = self._animation_time
-            elapsed = max(0.0, self._animation_time-self._pose_clock_started)
             if pose != "peek":
                 tail_offset, breath = 0, 0
                 if pose == "walk":
@@ -3071,9 +3189,9 @@ class DesktopCat(QWidget):
                     # and tail motion continue underneath on the idle clock.
                     tail_offset = (elapsed / ASSET_ANIMATION_SECONDS["idle"]) % 1.0
                     motion_phase = 1.0 - min(1.0, self._blink_left / BLINK_SECONDS)
-                elif pose in ("groom", "yawn", "stretch"):
+                elif pose in HABIT_DURATIONS:
                     motion_phase = min(1.0, self._habit_elapsed / HABIT_DURATIONS[pose])
-                else:
+                elif group != "pet":
                     duration = ASSET_ANIMATION_SECONDS[group]
                     motion_phase = (elapsed / duration) % 1.0
                 if pose != "land":
@@ -3092,8 +3210,15 @@ class DesktopCat(QWidget):
             elif pose in ("turn", "stand", "sit", "settle", "wake"):
                 duration = self.motion.turn_duration if pose == "turn" else self.motion.transition_duration
                 motion_phase = min(1.0, self.motion.transition_time / duration)
-            elif pose in ("groom", "yawn", "stretch"):
+            elif pose in HABIT_DURATIONS:
                 motion_phase = min(1.0, self._habit_elapsed / HABIT_DURATIONS[pose])
+            elif group in ("idle", "sleep"):
+                duration = ASSET_ANIMATION_SECONDS[group]
+                samples = 56 if group == "idle" else 36
+                motion_phase = (int(elapsed/duration*samples) % samples)/samples
+                tail_offset, breath, frame = 0, 0, 0
+            elif group == "pet":
+                frame = min(3, int(motion_phase*4))
         direction = 1 if pose == "peek" else self.motion.direction
         key = pose, frame, direction, tail_offset, breath, dangle, self.animal_type, self.palette, stretch
         display_scale = self.devicePixelRatioF() if animated_art and pose != "peek" else 1.0
@@ -3282,6 +3407,9 @@ class DesktopCat(QWidget):
         if self.motion.state not in ("held", "fall", "fly", "land", "turn", "stand", "sit", "settle", "wake"):
             self.motion.state, self.motion.vy = PETTED, 0.0
         self.motion.decision_in = self.rng.uniform(1.5, 3.0)
+        if (self._pose_clock_kind == (self.animal_type, "pet")
+                and self._animation_time-self._pose_clock_started >= PET_REACTION_SECONDS):
+            self._pose_clock_started = self._animation_time
         self._pet_until = now + BUBBLE_SECONDS
         quotes = ANIMAL_QUOTES.get(self.animal_type, CAT_QUOTES)
         choices = [quote for quote in quotes if quote != self.bubble.text]

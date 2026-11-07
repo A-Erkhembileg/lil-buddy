@@ -216,6 +216,28 @@ class FluidPlaybackTests(unittest.TestCase):
         self.cat._set_frame()
         self.assertAlmostEqual(self.cat._frame_key[-2], pet.LAND_FRAME_SECONDS / 2 / self.cat.motion.landing_duration)
 
+    def test_pet_reaction_finishes_before_speech_and_can_play_again(self):
+        for animal in pet.DRAWERS:
+            with self.subTest(animal=animal):
+                self.cat.set_animal_type(animal)
+                self.cat.motion.state, self.cat.motion.sleeping = "rest", False
+                self.cat._pet_until = 0
+                self.cat._set_frame()
+                neutral = self.cat._pixmap.toImage()
+                self.cat.pet(now=100.0)
+                self.assertEqual(self.cat._pixmap.toImage(), neutral)
+                self.cat._animation_time += pet.PET_REACTION_SECONDS/2
+                self.cat._set_frame()
+                self.assertNotEqual(self.cat._pixmap.toImage(), neutral)
+                self.cat._animation_time += pet.PET_REACTION_SECONDS
+                self.cat._set_frame()
+                self.assertEqual(self.cat._pixmap.toImage(), neutral)
+                self.assertTrue(self.cat.bubble.isVisible())
+                self.cat.pet(now=102.5)
+                self.cat._animation_time += pet.PET_REACTION_SECONDS/2
+                self.cat._set_frame()
+                self.assertNotEqual(self.cat._pixmap.toImage(), neutral)
+
     def test_retina_render_keeps_the_hit_region_in_window_coordinates(self):
         self.start_walking("Fox")
         mask = self.cat.mask()
